@@ -15,7 +15,7 @@ function formatDate(value: string) {
   return new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short", year: "numeric", timeZone: "America/Sao_Paulo" }).format(new Date(value));
 }
 
-export function Dashboard({ initialPlans }: { initialPlans: Plan[] }) {
+export function Dashboard({ initialPlans, siteUrl }: { initialPlans: Plan[]; siteUrl: string }) {
   const [plans, setPlans] = useState(initialPlans);
   const [title, setTitle] = useState("");
   const [slug, setSlug] = useState("");
@@ -28,7 +28,6 @@ export function Dashboard({ initialPlans }: { initialPlans: Plan[] }) {
   const [toast, setToast] = useState("");
   const fileInput = useRef<HTMLInputElement>(null);
 
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "meusite.com";
   const visiblePlans = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     if (!normalized) return plans;

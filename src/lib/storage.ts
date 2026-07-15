@@ -1,13 +1,24 @@
-import { del, list, put } from "@vercel/blob";
+import { getStore } from "@netlify/blobs";
 import type { Plan, PlanWithHtml } from "@/lib/types";
 
-const BLOB_ROOT = "vizantu-planos";
+const STORE_NAME = "vizantu-planos";
+const METADATA_PREFIX = "metadata/";
+const HTML_PREFIX = "plans/";
 const memory = globalThis as typeof globalThis & {
   __vizantuPlans?: Map<string, PlanWithHtml>;
 };
 
-function usesBlob() {
-  return Boolean(process.env.BLOB_READ_WRITE_TOKEN);
+function usesNetlifyBlobs() {
+  return Boolean(
+    process.env.NETLIFY === "true" ||
+      process.env.NETLIFY_BLOBS_CONTEXT ||
+      process.env.SITE_ID ||
+      (process.env.NETLIFY_SITE_ID && process.env.NETLIFY_AUTH_TOKEN),
+  );
+}
+
+function netlifyStore() {
+  return getStore({ name: STORE_NAME, consistency: "strong" });
 }
 
 function memoryStore() {
@@ -15,40 +26,53 @@ function memoryStore() {
   return memory.__vizantuPlans;
 }
 
-async function listBlobPlans() {
-  const { blobs } = await list({ prefix: `${BLOB_ROOT}/metadata/` });
+function metadataKey(slug: string) {
+  return `${METADATA_PREFIX}${slug}.json`;
+}
+
+function htmlKey(slug: string) {
+  return `${HTML_PREFIX}${slug}.html`;
+}
+
+async function listNetlifyPlans() {
+  const store = netlifyStore();
+  const { blobs } = await store.list({ prefix: METADATA_PREFIX });
   const plans = await Promise.all(
-    blobs.map(async (blob) => {
-      const response = await fetch(blob.url, { cache: "no-store" });
-      if (!response.ok) return null;
-      return (await response.json()) as Plan;
+    blobs.map(async ({ key }) => {
+      const raw = await store.get(key, { type: "text" });
+      if (!raw) return null;
+      try {
+        return JSON.parse(raw) as Plan;
+      } catch {
+        return null;
+      }
     }),
   );
   return plans.filter((plan): plan is Plan => Boolean(plan));
 }
 
 export async function listPlans() {
-  const plans = usesBlob()
-    ? await listBlobPlans()
+  const plans = usesNetlifyBlobs()
+    ? await listNetlifyPlans()
     : [...memoryStore().values()].map(({ plan }) => plan);
   return plans.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
 export async function getPlan(slug: string): Promise<PlanWithHtml | null> {
-  if (!usesBlob()) return memoryStore().get(slug) || null;
+  if (!usesNetlifyBlobs()) return memoryStore().get(slug) || null;
 
-  const { blobs } = await list({ prefix: `${BLOB_ROOT}/metadata/${slug}.json`, limit: 1 });
-  const metadataBlob = blobs[0];
-  if (!metadataBlob) return null;
+  const store = netlifyStore();
+  const [metadata, html] = await Promise.all([
+    store.get(metadataKey(slug), { type: "text" }),
+    store.get(htmlKey(slug), { type: "text" }),
+  ]);
+  if (!metadata || html === null) return null;
 
-  const metadataResponse = await fetch(metadataBlob.url, { cache: "no-store" });
-  if (!metadataResponse.ok) return null;
-  const plan = (await metadataResponse.json()) as Plan;
-  if (!plan.htmlUrl) return null;
-
-  const htmlResponse = await fetch(plan.htmlUrl, { cache: "no-store" });
-  if (!htmlResponse.ok) return null;
-  return { plan, html: await htmlResponse.text() };
+  try {
+    return { plan: JSON.parse(metadata) as Plan, html };
+  } catch {
+    return null;
+  }
 }
 
 export async function savePlan(input: {
@@ -60,7 +84,7 @@ export async function savePlan(input: {
 }) {
   const existing = await getPlan(input.slug);
   const now = new Date().toISOString();
-  const base: Plan = {
+  const plan: Plan = {
     slug: input.slug,
     title: input.title,
     originalName: input.originalName,
@@ -69,32 +93,16 @@ export async function savePlan(input: {
     updatedAt: now,
   };
 
-  if (!usesBlob()) {
-    memoryStore().set(input.slug, { plan: base, html: input.html });
-    return base;
+  if (!usesNetlifyBlobs()) {
+    memoryStore().set(input.slug, { plan, html: input.html });
+    return plan;
   }
 
-  const htmlBlob = await put(`${BLOB_ROOT}/plans/${input.slug}.html`, input.html, {
-    access: "public",
-    addRandomSuffix: false,
-    allowOverwrite: true,
-    contentType: "text/html; charset=utf-8",
-  });
-  const metadataPath = `${BLOB_ROOT}/metadata/${input.slug}.json`;
-  const plan: Plan = { ...base, htmlUrl: htmlBlob.url };
-  const metadataBlob = await put(metadataPath, JSON.stringify(plan), {
-    access: "public",
-    addRandomSuffix: false,
-    allowOverwrite: true,
-    contentType: "application/json; charset=utf-8",
-  });
-  plan.metadataUrl = metadataBlob.url;
-  await put(metadataPath, JSON.stringify(plan), {
-    access: "public",
-    addRandomSuffix: false,
-    allowOverwrite: true,
-    contentType: "application/json; charset=utf-8",
-  });
+  const store = netlifyStore();
+  await Promise.all([
+    store.set(htmlKey(input.slug), input.html),
+    store.setJSON(metadataKey(input.slug), plan),
+  ]);
   return plan;
 }
 
@@ -102,9 +110,9 @@ export async function deletePlan(slug: string) {
   const existing = await getPlan(slug);
   if (!existing) return false;
 
-  if (!usesBlob()) return memoryStore().delete(slug);
+  if (!usesNetlifyBlobs()) return memoryStore().delete(slug);
 
-  const urls = [existing.plan.htmlUrl, existing.plan.metadataUrl].filter((url): url is string => Boolean(url));
-  if (urls.length) await del(urls);
+  const store = netlifyStore();
+  await Promise.all([store.delete(htmlKey(slug)), store.delete(metadataKey(slug))]);
   return true;
 }

@@ -7,10 +7,12 @@ const SESSION_DAYS = 30;
 function authConfig() {
   const isDev = process.env.NODE_ENV !== "production";
   const password = process.env.ADMIN_PASSWORD || (isDev ? "vizantu-dev" : "");
-  const secret = process.env.SESSION_SECRET || (isDev ? "vizantu-planos-local-development-secret" : "");
+  const secret =
+    process.env.SESSION_SECRET ||
+    (password ? createHash("sha256").update(`vizantu-planos:${password}`).digest("hex") : "");
 
   if (!password || !secret) {
-    throw new Error("ADMIN_PASSWORD e SESSION_SECRET precisam estar configurados.");
+    throw new Error("ADMIN_PASSWORD precisa estar configurada no Netlify.");
   }
 
   return { password, secret };
