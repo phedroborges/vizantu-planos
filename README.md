@@ -91,6 +91,8 @@ O módulo é ativado automaticamente quando o HTML contém blocos com esta estru
 
 Cada `data-id` deve ser único dentro do plano. O cliente não precisa de login: a decisão e o comentário são salvos no Blob, e a equipe acompanha tudo em `/revisoes/endereco-do-plano`. Ao reenviar um HTML no mesmo endereço, o histórico anterior é preservado.
 
+Quando o HTML não traz esses controles, o Vizantu Planos cria automaticamente um bloco de aprovação ao final de cada `section.band[id]` e `article[id]`. Seções estratégicas e conteúdos individuais ficam registrados separadamente no painel e no histórico.
+
 ## Comandos
 
 ```bash

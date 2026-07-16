@@ -38,6 +38,47 @@ test("publica, abre e exclui um HTML", async ({ page, context }, testInfo) => {
   expect(viewport?.width).toBe(testInfo.project.name === "mobile" ? 390 : 1440);
 });
 
+test("cria aprovações automaticamente por seção e conteúdo", async ({ page }, testInfo) => {
+  const slug = `secoes-${testInfo.project.name}`;
+  const html = `<!doctype html>
+    <html lang="pt-BR">
+      <head><meta charset="utf-8"><title>Plano por seções</title></head>
+      <body>
+        <section class="band" id="objetivo"><div class="shell"><span class="section-no">01 · Objetivo</span><h2>Objetivo da campanha</h2></div></section>
+        <section class="band" id="conteudos"><div class="shell"><span class="section-no">02 · Conteúdos</span><h2>Conteúdos da campanha</h2>
+          <article class="script" id="video-1"><header class="script-header"><span class="eyebrow">Material 01</span><h3>Vídeo de abertura</h3></header></article>
+        </div></section>
+      </body>
+    </html>`;
+
+  const upload = await page.request.post("/api/plans", {
+    multipart: {
+      title: "Plano por seções",
+      slug,
+      file: { name: "secoes.html", mimeType: "text/html", buffer: Buffer.from(html) },
+    },
+  });
+  expect(upload.status()).toBe(201);
+
+  try {
+    await page.goto(`/${slug}`);
+    await expect(page.locator(".vz-generated-approval")).toHaveCount(3);
+    await expect(page.locator('[data-id="secao-objetivo"]')).toContainText("APROVAÇÃO DA SEÇÃO");
+    await expect(page.locator('[data-id="conteudo-video-1"]')).toContainText("APROVAÇÃO DO CONTEÚDO");
+
+    const objective = page.locator('[data-id="secao-objetivo"]');
+    await objective.locator("textarea").fill("Rever a meta principal.");
+    await objective.locator(".btn-adjust").click();
+    await expect(objective.locator(".btn-adjust")).toHaveClass(/active/);
+
+    await page.goto(`/revisoes/${slug}`);
+    await expect(page.locator(".approval-item")).toHaveCount(3);
+    await expect(page.getByText("Rever a meta principal.", { exact: true }).first()).toBeVisible();
+  } finally {
+    await page.request.delete(`/api/plans/${slug}`);
+  }
+});
+
 test("salva parecer por conteúdo e preserva o histórico", async ({ page }, testInfo) => {
   const slug = `aprovacao-${testInfo.project.name}`;
   const html = `<!doctype html>

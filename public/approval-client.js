@@ -3,8 +3,55 @@
 
   var ownScript = document.currentScript;
   var slug = ownScript && ownScript.dataset ? ownScript.dataset.planSlug : "";
+  if (!slug) return;
+
+  function textFrom(element) {
+    return element && element.textContent ? element.textContent.replace(/\s+/g, " ").trim() : "";
+  }
+
+  function hasDirectApproval(target) {
+    return Boolean(target.querySelector(":scope > .approval[data-id], :scope > .shell > .approval[data-id]"));
+  }
+
+  function createGeneratedApproval(target) {
+    var isContent = target.tagName === "ARTICLE";
+    var id = (isContent ? "conteudo-" : "secao-") + target.id;
+    if (hasDirectApproval(target) || document.querySelector('.approval[data-id="' + id + '"]')) return;
+
+    var label = textFrom(target.querySelector(isContent ? ".script-header .eyebrow, :scope > header .eyebrow" : ".section-no"));
+    var heading = textFrom(target.querySelector(isContent ? ".script-header h3, :scope > header h2, :scope > header h3, :scope h3" : ":scope > .shell > .section-head h2, :scope > .section-head h2, :scope h2"));
+    var title = [label, heading].filter(Boolean).join(" · ") || target.id;
+    var box = document.createElement("div");
+    box.className = "approval vz-generated-approval";
+    box.dataset.id = id;
+    box.dataset.title = title;
+
+    var head = document.createElement("div");
+    head.className = "vz-generated-head";
+    var kicker = document.createElement("span");
+    kicker.textContent = isContent ? "APROVAÇÃO DO CONTEÚDO" : "APROVAÇÃO DA SEÇÃO";
+    var headingElement = document.createElement("strong");
+    headingElement.textContent = heading || label || "Revise este item";
+    head.appendChild(kicker);
+    head.appendChild(headingElement);
+
+    var actions = document.createElement("div");
+    actions.className = "vz-generated-actions";
+    actions.innerHTML = '<button type="button" class="btn-ok">Aprovar</button><button type="button" class="btn-adjust">Pedir ajuste</button>';
+    var textarea = document.createElement("textarea");
+    textarea.setAttribute("aria-label", "Comentário sobre " + title);
+    textarea.placeholder = "Escreva aqui o que precisa ser ajustado ou registre uma observação.";
+    box.appendChild(head);
+    box.appendChild(actions);
+    box.appendChild(textarea);
+
+    var destination = isContent ? target : target.querySelector(":scope > .shell") || target;
+    destination.appendChild(box);
+  }
+
+  Array.prototype.forEach.call(document.querySelectorAll("section.band[id], article[id]"), createGeneratedApproval);
   var boxes = Array.prototype.slice.call(document.querySelectorAll(".approval[data-id]"));
-  if (!slug || !boxes.length) return;
+  if (!boxes.length) return;
 
   var apiUrl = "/api/plans/" + encodeURIComponent(slug) + "/approvals";
   var state = {};
@@ -19,7 +66,16 @@
       ".vz-save-comment:disabled,.approval button:disabled,.approval textarea:disabled{opacity:.55;cursor:wait}",
       ".vz-save-state[data-state=error]{color:#b3312a}",
       ".approval .btn-ok.active{background:#2f5f3c!important;border-color:#2f5f3c!important;color:#fff!important}",
-      ".approval .btn-adjust.active{background:#d65d32!important;border-color:#d65d32!important;color:#fff!important}"
+      ".approval .btn-adjust.active{background:#d65d32!important;border-color:#d65d32!important;color:#fff!important}",
+      ".vz-generated-approval{box-sizing:border-box;margin-top:32px;padding:20px;border:1px solid rgba(31,43,34,.18);border-radius:6px;background:#fff;color:#18201a;box-shadow:0 8px 24px rgba(25,35,27,.06);font-family:Arial,sans-serif}",
+      ".vz-generated-head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:16px}",
+      ".vz-generated-head span{flex:none;color:#749f1c;font:700 10px/1.4 Arial,sans-serif;letter-spacing:.08em}",
+      ".vz-generated-head strong{max-width:680px;text-align:right;font:650 15px/1.4 Arial,sans-serif}",
+      ".vz-generated-actions{display:flex;gap:8px;margin-bottom:10px}",
+      ".vz-generated-approval .btn-ok,.vz-generated-approval .btn-adjust{min-height:36px;padding:8px 14px;border:1px solid #cbd2cc;border-radius:4px;background:#f7f8f6;color:#18201a;cursor:pointer;font:650 12px Arial,sans-serif}",
+      ".vz-generated-approval textarea{box-sizing:border-box;display:block;width:100%;min-height:88px;padding:12px;border:1px solid #cbd2cc;border-radius:4px;background:#fff;color:#18201a;resize:vertical;font:400 13px/1.5 Arial,sans-serif}",
+      ".vz-generated-approval textarea:focus{outline:2px solid rgba(132,181,35,.32);border-color:#84b523}",
+      "@media(max-width:640px){.vz-generated-approval{padding:16px}.vz-generated-head{display:block}.vz-generated-head strong{display:block;margin-top:6px;text-align:left}.vz-generated-actions{display:grid;grid-template-columns:1fr 1fr}.vz-generated-approval .btn-ok,.vz-generated-approval .btn-adjust{width:100%}}"
     ].join("");
     document.head.appendChild(style);
   }
