@@ -1,7 +1,7 @@
 "use client";
 
 import { Check, Copy, ExternalLink, MessageSquareText, RefreshCw } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ApprovalItem, ApprovalStatus, Plan, PlanApprovals } from "@/lib/types";
 
 function formatDate(value?: string) {
@@ -55,7 +55,7 @@ export function ReviewDashboard({ plan, initialApprovals }: { plan: Plan; initia
   const overall = useMemo(() => planStatus(approvals.items), [approvals.items]);
   const pending = approvals.items.length - overall.approved - overall.changes;
 
-  async function refresh(silent = false) {
+  const refresh = useCallback(async (silent = false) => {
     if (!silent) setIsRefreshing(true);
     try {
       const response = await fetch(`/api/plans/${plan.slug}/approvals`, { cache: "no-store" });
@@ -66,12 +66,16 @@ export function ReviewDashboard({ plan, initialApprovals }: { plan: Plan; initia
     } finally {
       if (!silent) setIsRefreshing(false);
     }
-  }
+  }, [plan.slug]);
 
   useEffect(() => {
-    const timer = window.setInterval(() => refresh(true), 10_000);
-    return () => window.clearInterval(timer);
-  });
+    const initialRefresh = window.setTimeout(() => refresh(true), 0);
+    const refreshTimer = window.setInterval(() => refresh(true), 5_000);
+    return () => {
+      window.clearTimeout(initialRefresh);
+      window.clearInterval(refreshTimer);
+    };
+  }, [refresh]);
 
   async function copyReport() {
     await navigator.clipboard.writeText(buildReport(plan, approvals));
@@ -85,7 +89,7 @@ export function ReviewDashboard({ plan, initialApprovals }: { plan: Plan; initia
         <div>
           <span className="eyebrow">Acompanhamento do cliente</span>
           <h1>{plan.title}</h1>
-          <p>Decisões e comentários são atualizados automaticamente a cada 10 segundos.</p>
+          <p>Decisões e comentários são atualizados automaticamente.</p>
         </div>
         <div className="review-actions">
           <button className="secondary-button" type="button" onClick={() => refresh()} disabled={isRefreshing}>

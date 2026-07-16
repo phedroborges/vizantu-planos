@@ -354,16 +354,17 @@ export async function savePlan(input: {
 }
 
 export async function deletePlan(slug: string) {
-  const existing = await getPlan(slug);
-  if (!existing) return false;
-
   if (usesVercelBlobs()) {
-    const urls = [existing.plan.htmlUrl, existing.plan.metadataUrl, `${VERCEL_ROOT}/${approvalsKey(slug)}`].filter(
-      (url): url is string => Boolean(url),
-    );
-    if (urls.length) await delVercelBlobs(urls);
+    await delVercelBlobs([
+      `${VERCEL_ROOT}/${htmlKey(slug)}`,
+      `${VERCEL_ROOT}/${metadataKey(slug)}`,
+      `${VERCEL_ROOT}/${approvalsKey(slug)}`,
+    ]);
     return true;
   }
+
+  const existing = await getPlan(slug);
+  if (!existing) return false;
 
   if (!usesNetlifyBlobs()) {
     await Promise.all([
