@@ -1,14 +1,20 @@
 import { getStore } from "@netlify/blobs";
+import { del as delVercelBlobs, list as listVercelBlobs, put as putVercelBlob } from "@vercel/blob";
 import { mkdir, readFile, readdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { Plan, PlanWithHtml } from "@/lib/types";
 
 const STORE_NAME = "vizantu-planos";
+const VERCEL_ROOT = "vizantu-planos";
 const METADATA_PREFIX = "metadata/";
 const HTML_PREFIX = "plans/";
 const LOCAL_ROOT = path.join(process.cwd(), ".data");
 const LOCAL_METADATA = path.join(LOCAL_ROOT, "metadata");
 const LOCAL_HTML = path.join(LOCAL_ROOT, "plans");
+
+function usesVercelBlobs() {
+  return Boolean(process.env.VERCEL || process.env.BLOB_READ_WRITE_TOKEN || process.env.VERCEL_OIDC_TOKEN);
+}
 
 function usesNetlifyBlobs() {
   return Boolean(
@@ -78,14 +84,46 @@ async function listNetlifyPlans() {
   return plans.filter((plan): plan is Plan => Boolean(plan));
 }
 
+async function listVercelPlans() {
+  const { blobs } = await listVercelBlobs({ prefix: `${VERCEL_ROOT}/${METADATA_PREFIX}` });
+  const plans = await Promise.all(
+    blobs.map(async (blob) => {
+      const response = await fetch(blob.url, { cache: "no-store" });
+      if (!response.ok) return null;
+      return (await response.json()) as Plan;
+    }),
+  );
+  return plans.filter((plan): plan is Plan => Boolean(plan));
+}
+
 export async function listPlans() {
-  const plans = usesNetlifyBlobs()
-    ? await listNetlifyPlans()
-    : await listLocalPlans();
+  const plans = usesVercelBlobs()
+    ? await listVercelPlans()
+    : usesNetlifyBlobs()
+      ? await listNetlifyPlans()
+      : await listLocalPlans();
   return plans.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
 export async function getPlan(slug: string): Promise<PlanWithHtml | null> {
+  if (usesVercelBlobs()) {
+    const { blobs } = await listVercelBlobs({
+      prefix: `${VERCEL_ROOT}/${metadataKey(slug)}`,
+      limit: 1,
+    });
+    const metadataBlob = blobs[0];
+    if (!metadataBlob) return null;
+
+    const metadataResponse = await fetch(metadataBlob.url, { cache: "no-store" });
+    if (!metadataResponse.ok) return null;
+    const plan = (await metadataResponse.json()) as Plan;
+    if (!plan.htmlUrl) return null;
+
+    const htmlResponse = await fetch(plan.htmlUrl, { cache: "no-store" });
+    if (!htmlResponse.ok) return null;
+    return { plan, html: await htmlResponse.text() };
+  }
+
   if (!usesNetlifyBlobs()) {
     try {
       const [metadata, html] = await Promise.all([
@@ -130,6 +168,31 @@ export async function savePlan(input: {
     updatedAt: now,
   };
 
+  if (usesVercelBlobs()) {
+    const htmlBlob = await putVercelBlob(`${VERCEL_ROOT}/${htmlKey(input.slug)}`, input.html, {
+      access: "public",
+      addRandomSuffix: false,
+      allowOverwrite: true,
+      contentType: "text/html; charset=utf-8",
+    });
+    const metadataPath = `${VERCEL_ROOT}/${metadataKey(input.slug)}`;
+    const vercelPlan: Plan = { ...plan, htmlUrl: htmlBlob.url };
+    const metadataBlob = await putVercelBlob(metadataPath, JSON.stringify(vercelPlan), {
+      access: "public",
+      addRandomSuffix: false,
+      allowOverwrite: true,
+      contentType: "application/json; charset=utf-8",
+    });
+    vercelPlan.metadataUrl = metadataBlob.url;
+    await putVercelBlob(metadataPath, JSON.stringify(vercelPlan), {
+      access: "public",
+      addRandomSuffix: false,
+      allowOverwrite: true,
+      contentType: "application/json; charset=utf-8",
+    });
+    return vercelPlan;
+  }
+
   if (!usesNetlifyBlobs()) {
     await ensureLocalStore();
     await Promise.all([
@@ -150,6 +213,14 @@ export async function savePlan(input: {
 export async function deletePlan(slug: string) {
   const existing = await getPlan(slug);
   if (!existing) return false;
+
+  if (usesVercelBlobs()) {
+    const urls = [existing.plan.htmlUrl, existing.plan.metadataUrl].filter(
+      (url): url is string => Boolean(url),
+    );
+    if (urls.length) await delVercelBlobs(urls);
+    return true;
+  }
 
   if (!usesNetlifyBlobs()) {
     await Promise.all([

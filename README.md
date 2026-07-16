@@ -15,15 +15,25 @@ https://planos.vizantu.com.br/plano-julho-terranet
 - Ações para abrir, copiar o link e excluir.
 - Páginas públicas com `noindex` para não aparecerem em buscadores.
 - HTML publicado em sandbox de segurança, isolado do painel administrativo.
-- Netlify Blobs persistente, sem banco de dados ou configuração de storage.
+- Armazenamento persistente com Vercel Blob ou Netlify Blobs.
 
 ## Stack
 
 - Next.js 16 com App Router
 - React 19 e TypeScript
 - Tailwind CSS 4
-- Netlify Blobs
+- Vercel Blob e Netlify Blobs
 - Lucide Icons
+
+## Publicar na Vercel
+
+1. Importe este repositório em um novo projeto da Vercel.
+2. Em **Storage**, crie um **Blob Store público** e conecte-o ao projeto.
+3. A Vercel adicionará `BLOB_READ_WRITE_TOKEN` automaticamente.
+4. Em **Settings > Environment Variables**, cadastre `ADMIN_PASSWORD`.
+5. Faça um novo deploy e entre usando essa senha.
+
+Não é necessário configurar `NEXT_PUBLIC_SITE_URL`: o domínio é detectado automaticamente. Depois do deploy, cada HTML enviado pelo painel fica disponível imediatamente no endereço escolhido.
 
 ## Publicar no Netlify
 
@@ -57,7 +67,7 @@ pnpm install
 pnpm dev
 ```
 
-Em desenvolvimento, a senha padrão é `vizantu-dev` e os arquivos ficam em memória. Eles são apagados quando o servidor reinicia.
+Em desenvolvimento, a senha padrão é `vizantu-dev` e os arquivos ficam persistidos na pasta `.data`.
 
 Para testar localmente com outra senha, duplique `.env.example` como `.env.local` e altere `ADMIN_PASSWORD`.
 
