@@ -21,7 +21,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ slug: stri
     headers: {
       "Content-Type": "text/html; charset=utf-8",
       "Content-Security-Policy": "sandbox allow-scripts allow-forms allow-modals allow-downloads",
-      "Cache-Control": "public, max-age=60, stale-while-revalidate=300",
+      "Cache-Control": "no-store, max-age=0",
       "Referrer-Policy": "strict-origin-when-cross-origin",
       "X-Content-Type-Options": "nosniff",
       "X-Robots-Tag": "noindex, nofollow, noarchive",
