@@ -1,20 +1,10 @@
-import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { Dashboard } from "@/components/dashboard";
-import { isAuthenticated } from "@/lib/auth";
 import { listPlans } from "@/lib/storage";
 
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  let authenticated = false;
-  try {
-    authenticated = await isAuthenticated();
-  } catch {
-    redirect("/login?error=config");
-  }
-  if (!authenticated) redirect("/login");
-
   const requestHeaders = await headers();
   const host = requestHeaders.get("x-forwarded-host") || requestHeaders.get("host");
   const protocol = requestHeaders.get("x-forwarded-proto") || (host?.includes("localhost") ? "http" : "https");

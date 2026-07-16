@@ -100,31 +100,12 @@ h1 { margin-bottom: 10px; font-size: clamp(34px, 5vw, 56px); line-height: 1.02; 
 .empty-state p { color: var(--muted); font-size: 13px; margin: 0 auto; max-width: 360px; }
 .toast { position: fixed; right: 24px; bottom: 24px; background: var(--dark); color: white; padding: 13px 16px; font-size: 12px; box-shadow: 0 16px 38px #0003; z-index: 50; }
 
-.login-page { min-height: 100vh; display: grid; grid-template-columns: 1fr 1fr; background: white; }
-.login-visual { background: var(--dark); color: white; padding: 58px; display: flex; flex-direction: column; justify-content: space-between; position: relative; overflow: hidden; }
-.login-visual::after { content: ""; position: absolute; width: 430px; height: 620px; border: 62px solid var(--accent); right: -220px; top: -100px; transform: rotate(24deg); opacity: .13; }
-.login-visual .brand { position: relative; z-index: 1; }
-.login-copy { position: relative; z-index: 1; max-width: 540px; }
-.login-copy h1 { font-size: clamp(44px, 6vw, 76px); }
-.login-copy strong { color: var(--accent); }
-.login-copy p { color: #c6cbc6; font-size: 16px; max-width: 480px; }
-.login-form-wrap { display: grid; place-items: center; padding: 40px; background: var(--background); }
-.login-card { width: min(430px, 100%); background: white; border: 1px solid var(--line); padding: 36px; }
-.login-card h2 { font-size: 28px; margin-bottom: 9px; }
-.login-card > p { color: var(--muted); font-size: 13px; margin-bottom: 28px; }
-.login-card form { display: grid; gap: 18px; }
-.login-card .primary-button { width: 100%; }
-.login-hint { margin-top: 18px; color: var(--muted); font-size: 10px; text-align: center; }
-
 @media (max-width: 900px) {
   .dashboard-head { display: block; }
   .stats { margin-top: 25px; width: fit-content; }
   .workspace { grid-template-columns: 1fr; }
   .upload-panel { order: 1; }
   .list-panel { order: 2; }
-  .login-page { grid-template-columns: 1fr; }
-  .login-visual { min-height: 330px; padding: 38px; }
-  .login-copy h1 { font-size: 48px; }
 }
 
 @media (max-width: 620px) {
@@ -140,9 +121,4 @@ h1 { margin-bottom: 10px; font-size: clamp(34px, 5vw, 56px); line-height: 1.02; 
   .actions { grid-column: 2; grid-row: 1 / span 2; }
   .list-toolbar { align-items: stretch; flex-direction: column; }
   .search { max-width: none; }
-  .login-visual { min-height: 280px; padding: 28px; }
-  .login-copy h1 { font-size: 40px; }
-  .login-copy p { font-size: 14px; }
-  .login-form-wrap { padding: 20px; }
-  .login-card { padding: 27px 22px; }
 }

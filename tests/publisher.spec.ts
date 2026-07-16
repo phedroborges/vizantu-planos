@@ -3,12 +3,7 @@ import { expect, test } from "@playwright/test";
 test("publica, abre e exclui um HTML", async ({ page, context }, testInfo) => {
   const slug = `teste-${testInfo.project.name}`;
 
-  await page.goto("/login");
-  await page.getByLabel("Senha").fill("vizantu-dev");
-  await Promise.all([
-    page.waitForURL("/"),
-    page.getByRole("button", { name: "Entrar" }).click(),
-  ]);
+  await page.goto("/");
   await expect(page.getByRole("heading", { name: "Planos publicados" })).toBeVisible();
   await expect(page.locator("[data-nextjs-dialog]")).toHaveCount(0);
 

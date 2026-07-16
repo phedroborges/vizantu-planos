@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, Copy, ExternalLink, FileCode2, LogOut, Search, Trash2, UploadCloud } from "lucide-react";
+import { Check, Copy, ExternalLink, FileCode2, Search, Trash2, UploadCloud } from "lucide-react";
 import type { Plan } from "@/lib/types";
 import { toSlug } from "@/lib/slug";
 
@@ -97,7 +97,7 @@ export function Dashboard({ initialPlans, siteUrl }: { initialPlans: Plan[]; sit
 
   return (
     <>
-      <header className="topbar"><div className="app-shell topbar-inner"><div className="brand"><span className="brand-mark">VZ</span><span>Vizantu Planos<small>Publicador de apresentações</small></span></div><form action="/api/logout" method="post"><button className="ghost-button" type="submit"><LogOut size={15} /> Sair</button></form></div></header>
+      <header className="topbar"><div className="app-shell topbar-inner"><div className="brand"><span className="brand-mark">VZ</span><span>Vizantu Planos<small>Publicador de apresentações</small></span></div></div></header>
       <main className="app-shell dashboard">
         <div className="dashboard-head"><div><span className="eyebrow">Biblioteca de aprovações</span><h1>Planos publicados</h1><p>Envie um HTML e receba uma página pronta para compartilhar com o cliente.</p></div><div className="stats"><div className="stat"><strong>{plans.length}</strong><span>planos ativos</span></div><div className="stat"><strong>{plans.reduce((sum, plan) => sum + plan.size, 0) ? formatBytes(plans.reduce((sum, plan) => sum + plan.size, 0)) : "0 KB"}</strong><span>armazenados</span></div></div></div>
         <div className="workspace">

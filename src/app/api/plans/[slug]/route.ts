@@ -1,12 +1,10 @@
 import { NextResponse } from "next/server";
-import { isAuthenticated } from "@/lib/auth";
 import { isAllowedSlug } from "@/lib/slug";
 import { deletePlan } from "@/lib/storage";
 
 export const runtime = "nodejs";
 
 export async function DELETE(_: Request, { params }: { params: Promise<{ slug: string }> }) {
-  if (!(await isAuthenticated())) return NextResponse.json({ error: "Não autorizado." }, { status: 401 });
   const { slug } = await params;
   if (!isAllowedSlug(slug)) return NextResponse.json({ error: "Endereço inválido." }, { status: 400 });
   const deleted = await deletePlan(slug);

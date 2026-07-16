@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { isAuthenticated } from "@/lib/auth";
 import { isAllowedSlug, toSlug } from "@/lib/slug";
 import { savePlan } from "@/lib/storage";
 
@@ -13,8 +12,6 @@ const inputSchema = z.object({
 });
 
 export async function POST(request: Request) {
-  if (!(await isAuthenticated())) return NextResponse.json({ error: "Não autorizado." }, { status: 401 });
-
   try {
     const formData = await request.formData();
     const parsed = inputSchema.safeParse({

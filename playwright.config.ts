@@ -19,7 +19,7 @@ export default defineConfig({
   ],
   webServer: {
     command: "pnpm exec next dev -p 3210",
-    url: "http://localhost:3210/login",
+    url: "http://localhost:3210/",
     reuseExistingServer: true,
     timeout: 120_000,
   },
