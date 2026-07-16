@@ -31,7 +31,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           <form action="/api/login" method="post">
             <div className="field"><label htmlFor="password">Senha</label><input id="password" name="password" type="password" autoComplete="current-password" required autoFocus /></div>
             {error === "invalid" ? <div className="form-message">Senha incorreta. Tente novamente.</div> : null}
-            {error === "config" ? <div className="form-message">Cadastre a variavel ADMIN_PASSWORD no Netlify e publique novamente.</div> : null}
+            {error === "config" ? <div className="form-message">Cadastre a variável ADMIN_PASSWORD na hospedagem e publique novamente.</div> : null}
             <button className="primary-button" type="submit">Entrar</button>
           </form>
           <p className="login-hint">O upload fica protegido. Os planos publicados continuam acessíveis pelo link compartilhado.</p>

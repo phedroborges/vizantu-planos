@@ -12,7 +12,7 @@ function authConfig() {
     (password ? createHash("sha256").update(`vizantu-planos:${password}`).digest("hex") : "");
 
   if (!password || !secret) {
-    throw new Error("ADMIN_PASSWORD precisa estar configurada no Netlify.");
+    throw new Error("ADMIN_PASSWORD precisa estar configurada na hospedagem.");
   }
 
   return { password, secret };
