@@ -5,7 +5,10 @@ test("publica, abre e exclui um HTML", async ({ page, context }, testInfo) => {
 
   await page.goto("/login");
   await page.getByLabel("Senha").fill("vizantu-dev");
-  await page.getByRole("button", { name: "Entrar" }).click();
+  await Promise.all([
+    page.waitForURL("/"),
+    page.getByRole("button", { name: "Entrar" }).click(),
+  ]);
   await expect(page.getByRole("heading", { name: "Planos publicados" })).toBeVisible();
   await expect(page.locator("[data-nextjs-dialog]")).toHaveCount(0);
 

@@ -1,12 +1,14 @@
 import { getStore } from "@netlify/blobs";
+import { mkdir, readFile, readdir, unlink, writeFile } from "node:fs/promises";
+import path from "node:path";
 import type { Plan, PlanWithHtml } from "@/lib/types";
 
 const STORE_NAME = "vizantu-planos";
 const METADATA_PREFIX = "metadata/";
 const HTML_PREFIX = "plans/";
-const memory = globalThis as typeof globalThis & {
-  __vizantuPlans?: Map<string, PlanWithHtml>;
-};
+const LOCAL_ROOT = path.join(process.cwd(), ".data");
+const LOCAL_METADATA = path.join(LOCAL_ROOT, "metadata");
+const LOCAL_HTML = path.join(LOCAL_ROOT, "plans");
 
 function usesNetlifyBlobs() {
   return Boolean(
@@ -21,9 +23,11 @@ function netlifyStore() {
   return getStore({ name: STORE_NAME, consistency: "strong" });
 }
 
-function memoryStore() {
-  if (!memory.__vizantuPlans) memory.__vizantuPlans = new Map();
-  return memory.__vizantuPlans;
+async function ensureLocalStore() {
+  await Promise.all([
+    mkdir(LOCAL_METADATA, { recursive: true }),
+    mkdir(LOCAL_HTML, { recursive: true }),
+  ]);
 }
 
 function metadataKey(slug: string) {
@@ -32,6 +36,29 @@ function metadataKey(slug: string) {
 
 function htmlKey(slug: string) {
   return `${HTML_PREFIX}${slug}.html`;
+}
+
+function localMetadataPath(slug: string) {
+  return path.join(LOCAL_METADATA, `${slug}.json`);
+}
+
+function localHtmlPath(slug: string) {
+  return path.join(LOCAL_HTML, `${slug}.html`);
+}
+
+async function listLocalPlans() {
+  await ensureLocalStore();
+  const files = await readdir(LOCAL_METADATA);
+  const plans = await Promise.all(
+    files.filter((file) => file.endsWith(".json")).map(async (file) => {
+      try {
+        return JSON.parse(await readFile(path.join(LOCAL_METADATA, file), "utf8")) as Plan;
+      } catch {
+        return null;
+      }
+    }),
+  );
+  return plans.filter((plan): plan is Plan => Boolean(plan));
 }
 
 async function listNetlifyPlans() {
@@ -54,12 +81,22 @@ async function listNetlifyPlans() {
 export async function listPlans() {
   const plans = usesNetlifyBlobs()
     ? await listNetlifyPlans()
-    : [...memoryStore().values()].map(({ plan }) => plan);
+    : await listLocalPlans();
   return plans.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
 export async function getPlan(slug: string): Promise<PlanWithHtml | null> {
-  if (!usesNetlifyBlobs()) return memoryStore().get(slug) || null;
+  if (!usesNetlifyBlobs()) {
+    try {
+      const [metadata, html] = await Promise.all([
+        readFile(localMetadataPath(slug), "utf8"),
+        readFile(localHtmlPath(slug), "utf8"),
+      ]);
+      return { plan: JSON.parse(metadata) as Plan, html };
+    } catch {
+      return null;
+    }
+  }
 
   const store = netlifyStore();
   const [metadata, html] = await Promise.all([
@@ -94,7 +131,11 @@ export async function savePlan(input: {
   };
 
   if (!usesNetlifyBlobs()) {
-    memoryStore().set(input.slug, { plan, html: input.html });
+    await ensureLocalStore();
+    await Promise.all([
+      writeFile(localHtmlPath(input.slug), input.html, "utf8"),
+      writeFile(localMetadataPath(input.slug), JSON.stringify(plan), "utf8"),
+    ]);
     return plan;
   }
 
@@ -110,7 +151,13 @@ export async function deletePlan(slug: string) {
   const existing = await getPlan(slug);
   if (!existing) return false;
 
-  if (!usesNetlifyBlobs()) return memoryStore().delete(slug);
+  if (!usesNetlifyBlobs()) {
+    await Promise.all([
+      unlink(localHtmlPath(slug)),
+      unlink(localMetadataPath(slug)),
+    ]);
+    return true;
+  }
 
   const store = netlifyStore();
   await Promise.all([store.delete(htmlKey(slug)), store.delete(metadataKey(slug))]);
