@@ -13,6 +13,9 @@ https://planos.vizantu.com.br/plano-julho-terranet
 - Endereço editável e atualização do mesmo link ao reenviar um plano.
 - Lista pesquisável com tamanho e data de publicação.
 - Ações para abrir, copiar o link e excluir.
+- Aprovação individual de conteúdos, com comentário e solicitação de ajuste.
+- Status consolidado do plano e histórico completo de decisões.
+- Tela de acompanhamento com atualização automática.
 - Páginas públicas com `noindex` para não aparecerem em buscadores.
 - HTML publicado em sandbox de segurança, isolado do painel.
 - Armazenamento persistente com Vercel Blob ou Netlify Blobs.
@@ -73,6 +76,20 @@ Em desenvolvimento, os arquivos ficam persistidos na pasta `.data`.
 ## Atualizar um plano
 
 Publique novamente usando o mesmo endereço. O arquivo e os metadados são substituídos, mantendo o link já compartilhado.
+
+## Aprovação do cliente
+
+O módulo é ativado automaticamente quando o HTML contém blocos com esta estrutura:
+
+```html
+<div class="approval" data-id="roteiro-1" data-title="Vídeo 1 · Título do conteúdo">
+  <button type="button" class="btn-ok">Aprovar</button>
+  <button type="button" class="btn-adjust">Pedir ajuste</button>
+  <textarea placeholder="Comentário do cliente"></textarea>
+</div>
+```
+
+Cada `data-id` deve ser único dentro do plano. O cliente não precisa de login: a decisão e o comentário são salvos no Blob, e a equipe acompanha tudo em `/revisoes/endereco-do-plano`. Ao reenviar um HTML no mesmo endereço, o histórico anterior é preservado.
 
 ## Comandos
 

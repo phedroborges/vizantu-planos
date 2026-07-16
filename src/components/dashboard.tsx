@@ -1,9 +1,26 @@
 "use client";
 
+import {
+  Check,
+  ClipboardCheck,
+  Copy,
+  ExternalLink,
+  FileCode2,
+  Search,
+  Trash2,
+  UploadCloud,
+} from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, Copy, ExternalLink, FileCode2, Search, Trash2, UploadCloud } from "lucide-react";
-import type { Plan } from "@/lib/types";
 import { toSlug } from "@/lib/slug";
+import type { ApprovalSummary, Plan } from "@/lib/types";
+
+const emptySummary: ApprovalSummary = {
+  total: 0,
+  approved: 0,
+  changesRequested: 0,
+  pending: 0,
+  status: "not_started",
+};
 
 function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
@@ -12,11 +29,35 @@ function formatBytes(bytes: number) {
 }
 
 function formatDate(value: string) {
-  return new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short", year: "numeric", timeZone: "America/Sao_Paulo" }).format(new Date(value));
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    timeZone: "America/Sao_Paulo",
+  }).format(new Date(value));
 }
 
-export function Dashboard({ initialPlans, siteUrl, storageError = "" }: { initialPlans: Plan[]; siteUrl: string; storageError?: string }) {
+function approvalPresentation(summary: ApprovalSummary) {
+  if (summary.status === "approved") return { label: "Plano aprovado", tone: "approved", detail: `${summary.approved}/${summary.total} aprovados` };
+  if (summary.status === "changes_requested") return { label: "Plano com ajustes", tone: "adjustments", detail: `${summary.changesRequested} ${summary.changesRequested === 1 ? "ajuste" : "ajustes"}` };
+  if (summary.status === "in_review") return { label: "Em revisão", tone: "review", detail: `${summary.approved}/${summary.total} aprovados` };
+  if (summary.status === "pending") return { label: "Aguardando cliente", tone: "pending", detail: `${summary.total} conteúdos` };
+  return { label: "Aguardando acesso", tone: "pending", detail: "Sem avaliação" };
+}
+
+export function Dashboard({
+  initialPlans,
+  initialSummaries,
+  siteUrl,
+  storageError = "",
+}: {
+  initialPlans: Plan[];
+  initialSummaries: Record<string, ApprovalSummary>;
+  siteUrl: string;
+  storageError?: string;
+}) {
   const [plans, setPlans] = useState(initialPlans);
+  const [summaries, setSummaries] = useState(initialSummaries);
   const [title, setTitle] = useState("");
   const [slug, setSlug] = useState("");
   const [slugTouched, setSlugTouched] = useState(false);
@@ -77,9 +118,13 @@ export function Dashboard({ initialPlans, siteUrl, storageError = "" }: { initia
     if (!response.ok) return setError(result.error || "Não foi possível publicar o plano.");
 
     setPlans((current) => [result.plan, ...current.filter((plan) => plan.slug !== result.plan.slug)]);
-    setTitle(""); setSlug(""); setSlugTouched(false); setFile(null);
+    setSummaries((current) => ({ ...current, [result.plan.slug]: current[result.plan.slug] || emptySummary }));
+    setTitle("");
+    setSlug("");
+    setSlugTouched(false);
+    setFile(null);
     if (fileInput.current) fileInput.current.value = "";
-    showToast("Plano publicado e pronto para compartilhar.");
+    showToast("Plano publicado e pronto para aprovação.");
   }
 
   async function copyLink(slugToCopy: string) {
@@ -88,21 +133,75 @@ export function Dashboard({ initialPlans, siteUrl, storageError = "" }: { initia
   }
 
   async function remove(plan: Plan) {
-    if (!window.confirm(`Excluir “${plan.title}”? O link deixará de funcionar.`)) return;
+    if (!window.confirm(`Excluir “${plan.title}”? O plano e seu histórico deixarão de funcionar.`)) return;
     const response = await fetch(`/api/plans/${plan.slug}`, { method: "DELETE" });
     if (!response.ok) return showToast("Não foi possível excluir o plano.");
     setPlans((current) => current.filter((item) => item.slug !== plan.slug));
-    showToast("Plano excluído.");
+    setSummaries((current) => {
+      const next = { ...current };
+      delete next[plan.slug];
+      return next;
+    });
+    showToast("Plano e histórico excluídos.");
   }
+
+  const storageDisabled = !isHydrated || Boolean(storageError);
 
   return (
     <>
-      <header className="topbar"><div className="app-shell topbar-inner"><div className="brand"><span className="brand-mark">VZ</span><span>Vizantu Planos<small>Publicador de apresentações</small></span></div></div></header>
+      <header className="topbar">
+        <div className="app-shell topbar-inner">
+          <div className="brand"><span className="brand-mark">VZ</span><span>Vizantu Planos<small>Publicador de apresentações</small></span></div>
+        </div>
+      </header>
       <main className="app-shell dashboard">
-        <div className="dashboard-head"><div><span className="eyebrow">Biblioteca de aprovações</span><h1>Planos publicados</h1><p>Envie um HTML e receba uma página pronta para compartilhar com o cliente.</p></div><div className="stats"><div className="stat"><strong>{plans.length}</strong><span>planos ativos</span></div><div className="stat"><strong>{plans.reduce((sum, plan) => sum + plan.size, 0) ? formatBytes(plans.reduce((sum, plan) => sum + plan.size, 0)) : "0 KB"}</strong><span>armazenados</span></div></div></div>
+        <div className="dashboard-head">
+          <div><span className="eyebrow">Biblioteca de aprovações</span><h1>Planos publicados</h1><p>Envie um HTML, acompanhe o parecer do cliente e mantenha o histórico de cada conteúdo.</p></div>
+          <div className="stats">
+            <div className="stat"><strong>{plans.length}</strong><span>planos ativos</span></div>
+            <div className="stat"><strong>{plans.reduce((sum, plan) => sum + plan.size, 0) ? formatBytes(plans.reduce((sum, plan) => sum + plan.size, 0)) : "0 KB"}</strong><span>armazenados</span></div>
+          </div>
+        </div>
         <div className="workspace">
-          <section className="panel upload-panel"><div className="panel-head"><h2>Publicar novo plano</h2><p>O mesmo endereço será atualizado quando você reutilizar um slug.</p></div>{storageError ? <div className="storage-notice">{storageError}</div> : null}<form className="upload-form" onSubmit={upload}><div className="field"><label htmlFor="title">Título</label><input id="title" value={title} onChange={(event) => updateTitle(event.target.value)} placeholder="Plano de julho · TerraNet" required maxLength={120} disabled={!isHydrated || Boolean(storageError)} /></div><div className="field"><label htmlFor="slug">Endereço</label><input id="slug" value={slug} onChange={(event) => { setSlugTouched(true); setSlug(toSlug(event.target.value)); }} placeholder="plano-julho-terranet" required maxLength={80} disabled={!isHydrated || Boolean(storageError)} /><span className="slug-preview">{siteUrl || "meusite.com"}/{slug || "seu-endereco"}</span></div><label className={`dropzone ${isDragging ? "active" : ""}`} onDragOver={(event) => { event.preventDefault(); setIsDragging(true); }} onDragLeave={() => setIsDragging(false)} onDrop={(event) => { event.preventDefault(); setIsDragging(false); if (!storageError) pickFile(event.dataTransfer.files[0]); }}><input ref={fileInput} type="file" accept=".html,text/html" onChange={(event) => pickFile(event.target.files?.[0])} disabled={!isHydrated || Boolean(storageError)} />{file ? <div className="selected-file"><FileCode2 size={28} /><div><strong>{file.name}</strong><span>{formatBytes(file.size)} · pronto para publicar</span></div></div> : <div><UploadCloud size={29} /><strong>Arraste o HTML ou clique para escolher</strong><span>Arquivo único de até 4 MB</span></div>}</label>{error ? <div className="form-message">{error}</div> : null}<button className="primary-button" type="submit" disabled={isUploading || !isHydrated || Boolean(storageError)}>{isUploading ? "Publicando..." : <><UploadCloud size={16} /> Publicar plano</>}</button></form></section>
-          <section className="panel list-panel"><div className="list-toolbar"><div className="search"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar por cliente ou plano" aria-label="Buscar planos" /></div><span>{visiblePlans.length} {visiblePlans.length === 1 ? "resultado" : "resultados"}</span></div>{visiblePlans.length ? <ul className="plan-list">{visiblePlans.map((plan) => <li className="plan-row" key={plan.slug}><div className="plan-title"><a href={`/${plan.slug}`} target="_blank" rel="noreferrer">{plan.title}</a><div className="plan-url">/{plan.slug}</div></div><div className="plan-meta"><span className="status">Publicado</span><br />{formatDate(plan.updatedAt)} · {formatBytes(plan.size)}</div><div className="actions"><button className="icon-button" onClick={() => copyLink(plan.slug)} title="Copiar link" aria-label={`Copiar link de ${plan.title}`}><Copy size={15} /></button><a className="icon-button" href={`/${plan.slug}`} target="_blank" rel="noreferrer" title="Abrir plano" aria-label={`Abrir ${plan.title}`}><ExternalLink size={15} /></a><button className="icon-button" onClick={() => remove(plan)} title="Excluir" aria-label={`Excluir ${plan.title}`}><Trash2 size={15} /></button></div></li>)}</ul> : <div className="empty-state">{query ? <Search size={35} /> : <FileCode2 size={35} />}<h3>{query ? "Nenhum plano encontrado" : "Sua biblioteca começa aqui"}</h3><p>{query ? "Tente buscar por outro nome ou endereço." : "Publique o primeiro HTML e o link aparecerá nesta lista imediatamente."}</p></div>}</section>
+          <section className="panel upload-panel">
+            <div className="panel-head"><h2>Publicar novo plano</h2><p>O mesmo endereço será atualizado quando você reutilizar um slug.</p></div>
+            {storageError ? <div className="storage-notice">{storageError}</div> : null}
+            <form className="upload-form" onSubmit={upload}>
+              <div className="field"><label htmlFor="title">Título</label><input id="title" value={title} onChange={(event) => updateTitle(event.target.value)} placeholder="Plano de julho · TerraNet" required maxLength={120} disabled={storageDisabled} /></div>
+              <div className="field"><label htmlFor="slug">Endereço</label><input id="slug" value={slug} onChange={(event) => { setSlugTouched(true); setSlug(toSlug(event.target.value)); }} placeholder="plano-julho-terranet" required maxLength={80} disabled={storageDisabled} /><span className="slug-preview">{siteUrl || "meusite.com"}/{slug || "seu-endereco"}</span></div>
+              <label className={`dropzone ${isDragging ? "active" : ""}`} onDragOver={(event) => { event.preventDefault(); setIsDragging(true); }} onDragLeave={() => setIsDragging(false)} onDrop={(event) => { event.preventDefault(); setIsDragging(false); if (!storageError) pickFile(event.dataTransfer.files[0]); }}>
+                <input ref={fileInput} type="file" accept=".html,text/html" onChange={(event) => pickFile(event.target.files?.[0])} disabled={storageDisabled} />
+                {file ? <div className="selected-file"><FileCode2 size={28} /><div><strong>{file.name}</strong><span>{formatBytes(file.size)} · pronto para publicar</span></div></div> : <div><UploadCloud size={29} /><strong>Arraste o HTML ou clique para escolher</strong><span>Arquivo único de até 4 MB</span></div>}
+              </label>
+              {error ? <div className="form-message">{error}</div> : null}
+              <button className="primary-button" type="submit" disabled={isUploading || storageDisabled}>{isUploading ? "Publicando..." : <><UploadCloud size={16} /> Publicar plano</>}</button>
+            </form>
+          </section>
+
+          <section className="panel list-panel">
+            <div className="list-toolbar"><div className="search"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar por cliente ou plano" aria-label="Buscar planos" /></div><span>{visiblePlans.length} {visiblePlans.length === 1 ? "resultado" : "resultados"}</span></div>
+            {visiblePlans.length ? (
+              <ul className="plan-list">
+                {visiblePlans.map((plan) => {
+                  const approval = approvalPresentation(summaries[plan.slug] || emptySummary);
+                  return (
+                    <li className="plan-row" key={plan.slug}>
+                      <div className="plan-title"><a href={`/${plan.slug}`} target="_blank" rel="noreferrer">{plan.title}</a><div className="plan-url">/{plan.slug}</div></div>
+                      <div className="plan-meta"><span className={`status ${approval.tone}`}>{approval.label}</span><br />{approval.detail}<br />{formatDate(plan.updatedAt)} · {formatBytes(plan.size)}</div>
+                      <div className="actions">
+                        <a className="icon-button approval-action" href={`/revisoes/${plan.slug}`} title="Acompanhar aprovações" aria-label={`Acompanhar aprovações de ${plan.title}`}><ClipboardCheck size={15} /></a>
+                        <button className="icon-button" onClick={() => copyLink(plan.slug)} title="Copiar link" aria-label={`Copiar link de ${plan.title}`}><Copy size={15} /></button>
+                        <a className="icon-button" href={`/${plan.slug}`} target="_blank" rel="noreferrer" title="Abrir plano" aria-label={`Abrir ${plan.title}`}><ExternalLink size={15} /></a>
+                        <button className="icon-button" onClick={() => remove(plan)} title="Excluir" aria-label={`Excluir ${plan.title}`}><Trash2 size={15} /></button>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <div className="empty-state">{query ? <Search size={35} /> : <FileCode2 size={35} />}<h3>{query ? "Nenhum plano encontrado" : "Sua biblioteca começa aqui"}</h3><p>{query ? "Tente buscar por outro nome ou endereço." : "Publique o primeiro HTML e o link aparecerá nesta lista imediatamente."}</p></div>
+            )}
+          </section>
         </div>
       </main>
       {toast ? <div className="toast"><Check size={14} style={{ display: "inline", marginRight: 8 }} />{toast}</div> : null}

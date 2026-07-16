@@ -4,6 +4,12 @@ import { getPlan } from "@/lib/storage";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+function addApprovalClient(html: string, slug: string) {
+  if (html.includes("data-vizantu-approval-client")) return html;
+  const client = `<script src="/approval-client.js" data-plan-slug="${slug}" data-vizantu-approval-client defer></script>`;
+  return /<\/body>/i.test(html) ? html.replace(/<\/body>/i, `${client}</body>`) : `${html}${client}`;
+}
+
 function notFound() {
   return new Response(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Plano não encontrado</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f4f5f2;color:#151715;font-family:Arial,sans-serif}.box{max-width:520px;padding:40px;border:1px solid #dde1dc;background:white}span{color:#88b725;font-size:12px;font-weight:700;text-transform:uppercase}h1{font-size:38px;margin:12px 0}p{color:#687068;line-height:1.6}</style></head><body><main class="box"><span>Vizantu Planos</span><h1>Este plano não está disponível.</h1><p>Confira o endereço recebido ou solicite um novo link à equipe responsável.</p></main></body></html>`, {
     status: 404,
@@ -17,10 +23,10 @@ export async function GET(_: Request, { params }: { params: Promise<{ slug: stri
   const result = await getPlan(slug);
   if (!result) return notFound();
 
-  return new Response(result.html, {
+  return new Response(addApprovalClient(result.html, slug), {
     headers: {
       "Content-Type": "text/html; charset=utf-8",
-      "Content-Security-Policy": "sandbox allow-scripts allow-forms allow-modals allow-downloads",
+      "Content-Security-Policy": "sandbox allow-scripts allow-forms allow-modals allow-downloads allow-popups",
       "Cache-Control": "no-store, max-age=0",
       "Referrer-Policy": "strict-origin-when-cross-origin",
       "X-Content-Type-Options": "nosniff",

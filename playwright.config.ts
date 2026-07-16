@@ -20,6 +20,7 @@ export default defineConfig({
   webServer: {
     command: "pnpm exec next dev -p 3210",
     url: "http://localhost:3210/",
+    env: { ...process.env, STORAGE_DRIVER: "local" },
     reuseExistingServer: true,
     timeout: 120_000,
   },

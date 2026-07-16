@@ -37,3 +37,56 @@ test("publica, abre e exclui um HTML", async ({ page, context }, testInfo) => {
   expect(dimensions.scroll).toBeLessThanOrEqual(dimensions.client + 1);
   expect(viewport?.width).toBe(testInfo.project.name === "mobile" ? 390 : 1440);
 });
+
+test("salva parecer por conteúdo e preserva o histórico", async ({ page }, testInfo) => {
+  const slug = `aprovacao-${testInfo.project.name}`;
+  const html = `<!doctype html>
+    <html lang="pt-BR">
+      <head><meta charset="utf-8"><title>Plano com aprovação</title></head>
+      <body>
+        <article id="conteudo-1">
+          <h1>Conteúdo de teste</h1>
+          <div class="approval" data-id="conteudo-1" data-title="Vídeo 1 · Conteúdo de teste">
+            <button type="button" class="btn-ok">Aprovar</button>
+            <button type="button" class="btn-adjust">Pedir ajuste</button>
+            <textarea aria-label="Comentário"></textarea>
+          </div>
+        </article>
+      </body>
+    </html>`;
+
+  const upload = await page.request.post("/api/plans", {
+    multipart: {
+      title: "Plano com aprovação",
+      slug,
+      file: { name: "aprovacao.html", mimeType: "text/html", buffer: Buffer.from(html) },
+    },
+  });
+  expect(upload.status()).toBe(201);
+
+  try {
+    await page.goto(`/${slug}`);
+    await expect(page.locator(".vz-save-state")).toContainText("Ainda não avaliado");
+    await page.getByLabel("Comentário").fill("Trocar a abertura e manter o encerramento.");
+    await page.getByRole("button", { name: "Pedir ajuste" }).click();
+    await expect(page.getByRole("button", { name: "Pedir ajuste" })).toHaveClass(/active/);
+    await expect(page.locator(".vz-save-state")).toContainText("Salvo em");
+
+    await page.goto(`/revisoes/${slug}`);
+    await expect(page.getByText("Plano com ajustes", { exact: true })).toBeVisible();
+    await expect(page.getByText("Trocar a abertura e manter o encerramento.", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText("Solicitou ajuste", { exact: true })).toBeVisible();
+
+    await page.goto(`/${slug}`);
+    await expect(page.getByRole("button", { name: "Pedir ajuste" })).toHaveClass(/active/);
+    await page.getByRole("button", { name: "Aprovar" }).click();
+    await expect(page.getByRole("button", { name: "Aprovar" })).toHaveClass(/active/);
+
+    await page.goto(`/revisoes/${slug}`);
+    await expect(page.getByText("Plano aprovado", { exact: true })).toBeVisible();
+    await expect(page.getByText("Aprovou o conteúdo", { exact: true })).toBeVisible();
+    await expect(page.getByText("Solicitou ajuste", { exact: true })).toBeVisible();
+  } finally {
+    await page.request.delete(`/api/plans/${slug}`);
+  }
+});
