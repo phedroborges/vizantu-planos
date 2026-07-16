@@ -99,7 +99,7 @@
     var approved = items.filter(function (item) { return item.status === "approved"; }).length;
     var changes = items.filter(function (item) { return item.status === "changes_requested"; }).length;
     var done = approved + changes;
-    var overall = changes ? "Plano com ajustes" : approved === items.length ? "Plano aprovado" : "Em revisão";
+    var overall = changes ? "Plano com ajustes" : approved === items.length ? "Plano aprovado" : approved === 0 ? "Aguardando cliente" : "Em revisão";
     var counter = document.getElementById("appr-count");
     if (counter) counter.textContent = done + " de " + items.length + " conteúdos avaliados · " + overall;
   }
