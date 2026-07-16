@@ -35,6 +35,7 @@ function planStatus(items: ApprovalItem[]) {
   if (!items.length) return { label: "Aguardando acesso", tone: "pending", approved, changes };
   if (changes) return { label: "Plano com ajustes", tone: "adjustments", approved, changes };
   if (approved === items.length) return { label: "Plano aprovado", tone: "approved", approved, changes };
+  if (approved === 0) return { label: "Aguardando cliente", tone: "pending", approved, changes };
   return { label: "Plano em revisão", tone: "review", approved, changes };
 }
 

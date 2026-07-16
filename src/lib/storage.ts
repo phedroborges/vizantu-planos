@@ -1,5 +1,5 @@
 import { getStore } from "@netlify/blobs";
-import { del as delVercelBlobs, list as listVercelBlobs, put as putVercelBlob } from "@vercel/blob";
+import { del as delVercelBlobs, get as getVercelBlob, list as listVercelBlobs, put as putVercelBlob } from "@vercel/blob";
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -102,9 +102,9 @@ async function listVercelPlans() {
   const { blobs } = await listVercelBlobs({ prefix: `${VERCEL_ROOT}/${METADATA_PREFIX}` });
   const plans = await Promise.all(
     blobs.map(async (blob) => {
-      const response = await fetch(blob.url, { cache: "no-store" });
-      if (!response.ok) return null;
-      return (await response.json()) as Plan;
+      const result = await getVercelBlob(blob.pathname, { access: "public", useCache: false });
+      if (!result || result.statusCode !== 200) return null;
+      return JSON.parse(await new Response(result.stream).text()) as Plan;
     }),
   );
   return plans.filter((plan): plan is Plan => Boolean(plan));
@@ -140,14 +140,9 @@ export function summarizeApprovals(approvals: PlanApprovals): ApprovalSummary {
 
 export async function getPlanApprovals(slug: string): Promise<PlanApprovals> {
   if (usesVercelBlobs()) {
-    const { blobs } = await listVercelBlobs({
-      prefix: `${VERCEL_ROOT}/${approvalsKey(slug)}`,
-      limit: 1,
-    });
-    if (!blobs[0]) return emptyApprovals(slug);
-    const response = await fetch(blobs[0].url, { cache: "no-store" });
-    if (!response.ok) return emptyApprovals(slug);
-    return (await response.json()) as PlanApprovals;
+    const result = await getVercelBlob(`${VERCEL_ROOT}/${approvalsKey(slug)}`, { access: "public", useCache: false });
+    if (!result || result.statusCode !== 200) return emptyApprovals(slug);
+    return JSON.parse(await new Response(result.stream).text()) as PlanApprovals;
   }
 
   if (!usesNetlifyBlobs()) {
@@ -264,21 +259,12 @@ export async function recordApproval(input: {
 
 export async function getPlan(slug: string): Promise<PlanWithHtml | null> {
   if (usesVercelBlobs()) {
-    const { blobs } = await listVercelBlobs({
-      prefix: `${VERCEL_ROOT}/${metadataKey(slug)}`,
-      limit: 1,
-    });
-    const metadataBlob = blobs[0];
-    if (!metadataBlob) return null;
-
-    const metadataResponse = await fetch(metadataBlob.url, { cache: "no-store" });
-    if (!metadataResponse.ok) return null;
-    const plan = (await metadataResponse.json()) as Plan;
-    if (!plan.htmlUrl) return null;
-
-    const htmlResponse = await fetch(plan.htmlUrl, { cache: "no-store" });
-    if (!htmlResponse.ok) return null;
-    return { plan, html: await htmlResponse.text() };
+    const metadataResult = await getVercelBlob(`${VERCEL_ROOT}/${metadataKey(slug)}`, { access: "public", useCache: false });
+    if (!metadataResult || metadataResult.statusCode !== 200) return null;
+    const plan = JSON.parse(await new Response(metadataResult.stream).text()) as Plan;
+    const htmlResult = await getVercelBlob(`${VERCEL_ROOT}/${htmlKey(slug)}`, { access: "public", useCache: false });
+    if (!htmlResult || htmlResult.statusCode !== 200) return null;
+    return { plan, html: await new Response(htmlResult.stream).text() };
   }
 
   if (!usesNetlifyBlobs()) {
@@ -372,11 +358,7 @@ export async function deletePlan(slug: string) {
   if (!existing) return false;
 
   if (usesVercelBlobs()) {
-    const { blobs: approvalBlobs } = await listVercelBlobs({
-      prefix: `${VERCEL_ROOT}/${approvalsKey(slug)}`,
-      limit: 1,
-    });
-    const urls = [existing.plan.htmlUrl, existing.plan.metadataUrl, approvalBlobs[0]?.url].filter(
+    const urls = [existing.plan.htmlUrl, existing.plan.metadataUrl, `${VERCEL_ROOT}/${approvalsKey(slug)}`].filter(
       (url): url is string => Boolean(url),
     );
     if (urls.length) await delVercelBlobs(urls);
