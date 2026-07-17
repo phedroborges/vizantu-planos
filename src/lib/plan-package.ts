@@ -11,6 +11,10 @@ const MAX_UNCOMPRESSED_SIZE = 32 * 1024 * 1024;
 const MAX_RENDERED_SIZE = 12 * 1024 * 1024;
 const textExtensions = new Set([".css", ".html", ".js", ".jsx", ".json", ".mjs", ".ts", ".tsx"]);
 
+function nextRuntime(moduleName: string) {
+  return path.join(process.cwd(), "node_modules", "next", "dist", "compiled", ...moduleName.split("/"));
+}
+
 export class PlanPackageError extends Error {}
 
 function safePath(value: string) {
@@ -84,6 +88,13 @@ async function bundle(entryPoint: string) {
     minify: true,
     legalComments: "none",
     nodePaths: [path.join(process.cwd(), "node_modules")],
+    alias: {
+      react: nextRuntime("react"),
+      "react/jsx-runtime": nextRuntime("react/jsx-runtime"),
+      "react/jsx-dev-runtime": nextRuntime("react/jsx-dev-runtime"),
+      "react-dom": nextRuntime("react-dom"),
+      "react-dom/client": nextRuntime("react-dom/client"),
+    },
     define: { "process.env.NODE_ENV": '"production"' },
     loader: {
       ".avif": "dataurl", ".gif": "dataurl", ".jpeg": "dataurl", ".jpg": "dataurl",
