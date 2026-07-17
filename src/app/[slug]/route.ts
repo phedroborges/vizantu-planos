@@ -5,6 +5,10 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 function addApprovalClient(html: string, slug: string) {
+  const storageShim = `<script data-vizantu-storage-shim>(function(){function memory(){var values={};return{getItem:function(key){return Object.prototype.hasOwnProperty.call(values,key)?values[key]:null},setItem:function(key,value){values[key]=String(value)},removeItem:function(key){delete values[key]},clear:function(){values={}},key:function(index){return Object.keys(values)[index]||null},get length(){return Object.keys(values).length}}}["localStorage","sessionStorage"].forEach(function(name){try{window[name].getItem("__vizantu_test__")}catch(error){try{Object.defineProperty(window,name,{configurable:true,value:memory()})}catch(ignore){}}})})();</script>`;
+  if (!html.includes("data-vizantu-storage-shim")) {
+    html = /<head(?:\s[^>]*)?>/i.test(html) ? html.replace(/<head(?:\s[^>]*)?>/i, (head) => `${head}${storageShim}`) : `${storageShim}${html}`;
+  }
   if (html.includes("data-vizantu-approval-client")) return html;
   const client = `<script src="/approval-client.js" data-plan-slug="${slug}" data-vizantu-approval-client defer></script>`;
   return /<\/body>/i.test(html) ? html.replace(/<\/body>/i, `${client}</body>`) : `${html}${client}`;

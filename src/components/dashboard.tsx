@@ -5,6 +5,7 @@ import {
   ClipboardCheck,
   Copy,
   ExternalLink,
+  FileArchive,
   FileCode2,
   Search,
   Trash2,
@@ -94,17 +95,17 @@ export function Dashboard({
   function pickFile(nextFile?: File) {
     if (!nextFile) return;
     setError("");
-    if (!nextFile.name.toLowerCase().endsWith(".html")) {
-      setError("Envie um arquivo com extensão .html.");
+    if (!/\.(?:html|zip)$/i.test(nextFile.name)) {
+      setError("Envie um arquivo com extensão .html ou .zip.");
       return;
     }
     setFile(nextFile);
-    if (!title) updateTitle(nextFile.name.replace(/\.html$/i, "").replace(/[-_]+/g, " "));
+    if (!title) updateTitle(nextFile.name.replace(/\.(?:html|zip)$/i, "").replace(/[-_]+/g, " "));
   }
 
   async function upload(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!file) return setError("Escolha um arquivo HTML.");
+    if (!file) return setError("Escolha um arquivo HTML ou ZIP.");
     setError("");
     setIsUploading(true);
     const body = new FormData();
@@ -156,7 +157,7 @@ export function Dashboard({
       </header>
       <main className="app-shell dashboard">
         <div className="dashboard-head">
-          <div><span className="eyebrow">Biblioteca de aprovações</span><h1>Planos publicados</h1><p>Envie um HTML, acompanhe o parecer do cliente e mantenha o histórico de cada conteúdo.</p></div>
+          <div><span className="eyebrow">Biblioteca de aprovações</span><h1>Planos publicados</h1><p>Envie um HTML ou projeto ZIP, acompanhe o parecer do cliente e mantenha o histórico de cada conteúdo.</p></div>
           <div className="stats">
             <div className="stat"><strong>{plans.length}</strong><span>planos ativos</span></div>
             <div className="stat"><strong>{plans.reduce((sum, plan) => sum + plan.size, 0) ? formatBytes(plans.reduce((sum, plan) => sum + plan.size, 0)) : "0 KB"}</strong><span>armazenados</span></div>
@@ -170,8 +171,8 @@ export function Dashboard({
               <div className="field"><label htmlFor="title">Título</label><input id="title" value={title} onChange={(event) => updateTitle(event.target.value)} placeholder="Plano de julho · TerraNet" required maxLength={120} disabled={storageDisabled} /></div>
               <div className="field"><label htmlFor="slug">Endereço</label><input id="slug" value={slug} onChange={(event) => { setSlugTouched(true); setSlug(toSlug(event.target.value)); }} placeholder="plano-julho-terranet" required maxLength={80} disabled={storageDisabled} /><span className="slug-preview">{siteUrl || "meusite.com"}/{slug || "seu-endereco"}</span></div>
               <label className={`dropzone ${isDragging ? "active" : ""}`} onDragOver={(event) => { event.preventDefault(); setIsDragging(true); }} onDragLeave={() => setIsDragging(false)} onDrop={(event) => { event.preventDefault(); setIsDragging(false); if (!storageError) pickFile(event.dataTransfer.files[0]); }}>
-                <input ref={fileInput} type="file" accept=".html,text/html" onChange={(event) => pickFile(event.target.files?.[0])} disabled={storageDisabled} />
-                {file ? <div className="selected-file"><FileCode2 size={28} /><div><strong>{file.name}</strong><span>{formatBytes(file.size)} · pronto para publicar</span></div></div> : <div><UploadCloud size={29} /><strong>Arraste o HTML ou clique para escolher</strong><span>Arquivo único de até 4 MB</span></div>}
+                <input ref={fileInput} type="file" accept=".html,.zip,text/html,application/zip" onChange={(event) => pickFile(event.target.files?.[0])} disabled={storageDisabled} />
+                {file ? <div className="selected-file">{file.name.toLowerCase().endsWith(".zip") ? <FileArchive size={28} /> : <FileCode2 size={28} />}<div><strong>{file.name}</strong><span>{formatBytes(file.size)} · pronto para publicar</span></div></div> : <div><UploadCloud size={29} /><strong>Arraste o HTML ou ZIP</strong><span>Documento ou projeto completo de até 4 MB</span></div>}
               </label>
               {error ? <div className="form-message">{error}</div> : null}
               <button className="primary-button" type="submit" disabled={isUploading || storageDisabled}>{isUploading ? "Publicando..." : <><UploadCloud size={16} /> Publicar plano</>}</button>
@@ -199,7 +200,7 @@ export function Dashboard({
                 })}
               </ul>
             ) : (
-              <div className="empty-state">{query ? <Search size={35} /> : <FileCode2 size={35} />}<h3>{query ? "Nenhum plano encontrado" : "Sua biblioteca começa aqui"}</h3><p>{query ? "Tente buscar por outro nome ou endereço." : "Publique o primeiro HTML e o link aparecerá nesta lista imediatamente."}</p></div>
+              <div className="empty-state">{query ? <Search size={35} /> : <FileCode2 size={35} />}<h3>{query ? "Nenhum plano encontrado" : "Sua biblioteca começa aqui"}</h3><p>{query ? "Tente buscar por outro nome ou endereço." : "Publique o primeiro HTML ou ZIP e o link aparecerá nesta lista imediatamente."}</p></div>
             )}
           </section>
         </div>

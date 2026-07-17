@@ -9,7 +9,7 @@ https://planos.vizantu.com.br/plano-julho-terranet
 ## O que o app entrega
 
 - Acesso direto ao painel, sem login.
-- Upload de HTML por seleção ou arrastar e soltar.
+- Upload de HTML ou projeto ZIP por seleção ou arrastar e soltar.
 - Endereço editável e atualização do mesmo link ao reenviar um plano.
 - Lista pesquisável com tamanho e data de publicação.
 - Ações para abrir, copiar o link e excluir.
@@ -69,7 +69,8 @@ Em desenvolvimento, os arquivos ficam persistidos na pasta `.data`.
 ## Acesso e segurança
 
 - O painel não exige login. Qualquer pessoa com o endereço pode publicar, substituir ou excluir planos.
-- O limite padrão é 4 MB e apenas documentos HTML completos são aceitos.
+- O limite de envio é 4 MB. São aceitos documentos HTML e projetos ZIP com `app/page.tsx`, `src/App.tsx` ou `index.html`.
+- Pacotes React/TSX são compilados no envio; CSS, imagens e fontes são incorporados ao plano publicado.
 - O HTML público recebe uma política CSP `sandbox` sem `allow-same-origin`.
 - Os planos públicos são acessíveis para quem possui o link.
 
@@ -91,7 +92,7 @@ O módulo é ativado automaticamente quando o HTML contém blocos com esta estru
 
 Cada `data-id` deve ser único dentro do plano. O cliente não precisa de login: a decisão e o comentário são salvos no Blob, e a equipe acompanha tudo em `/revisoes/endereco-do-plano`. Ao reenviar um HTML no mesmo endereço, o histórico anterior é preservado.
 
-Quando o HTML não traz esses controles, o Vizantu Planos cria automaticamente um bloco de aprovação ao final de cada `section.band[id]` e `article[id]`. Seções estratégicas e conteúdos individuais ficam registrados separadamente no painel e no histórico.
+Quando o HTML não traz esses controles, o Vizantu Planos cria automaticamente um bloco de aprovação ao final de cada `section.band`, `section.slide` e `article.script[id]`. Seções estratégicas, slides e conteúdos individuais ficam registrados separadamente no painel e no histórico.
 
 ## Comandos
 

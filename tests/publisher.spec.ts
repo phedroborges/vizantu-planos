@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { strToU8, zipSync } from "fflate";
 
 test("publica, abre e exclui um HTML", async ({ page, context }, testInfo) => {
   const slug = `teste-${testInfo.project.name}`;
@@ -36,6 +37,42 @@ test("publica, abre e exclui um HTML", async ({ page, context }, testInfo) => {
   const dimensions = await page.evaluate(() => ({ client: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth }));
   expect(dimensions.scroll).toBeLessThanOrEqual(dimensions.client + 1);
   expect(viewport?.width).toBe(testInfo.project.name === "mobile" ? 390 : 1440);
+});
+
+test("compila e publica um projeto React em ZIP", async ({ page }, testInfo) => {
+  const slug = `projeto-zip-${testInfo.project.name}`;
+  const archive = zipSync({
+    "app/page.tsx": strToU8(`"use client";
+      import { useState } from "react";
+      export default function Page() {
+        const [count, setCount] = useState(0);
+        return <main><section className="slide"><div className="deck"><img alt="Marca ZIP" src="/assets/mark.svg" /><h2>Plano vindo do ZIP</h2><button onClick={() => setCount(count + 1)}>Interações {count}</button></div></section></main>;
+      }`),
+    "app/globals.css": strToU8("body{margin:0;font-family:Arial}.slide{padding:40px}.deck{max-width:800px;margin:auto}.deck img{width:40px}"),
+    "app/layout.tsx": strToU8('export const metadata = { title: "Plano ZIP" };'),
+    "public/assets/mark.svg": strToU8('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><path fill="#84b523" d="M0 0h10v10H0z"/></svg>'),
+  });
+
+  const upload = await page.request.post("/api/plans", {
+    multipart: {
+      title: "Projeto ZIP",
+      slug,
+      file: { name: "projeto.zip", mimeType: "application/zip", buffer: Buffer.from(archive) },
+    },
+  });
+  expect(upload.status()).toBe(201);
+
+  try {
+    await page.goto(`/${slug}`);
+    await expect(page.getByRole("heading", { name: "Plano vindo do ZIP" })).toBeVisible();
+    await expect(page.getByAltText("Marca ZIP")).toHaveAttribute("src", /^data:image\/svg\+xml;base64,/);
+    await page.getByRole("button", { name: "Interações 0" }).click();
+    await expect(page.getByRole("button", { name: "Interações 1" })).toBeVisible();
+    await expect(page.locator(".vz-generated-approval")).toHaveCount(1);
+    await expect(page.locator('[data-id="secao-vizantu-slide-01"]')).toContainText("APROVAÇÃO DA SEÇÃO");
+  } finally {
+    await page.request.delete(`/api/plans/${slug}`);
+  }
 });
 
 test("cria aprovações automaticamente por seção e conteúdo", async ({ page }, testInfo) => {

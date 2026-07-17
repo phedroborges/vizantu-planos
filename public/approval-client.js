@@ -13,8 +13,9 @@
     return Boolean(target.querySelector(":scope > .approval[data-id], :scope > .shell > .approval[data-id]"));
   }
 
-  function createGeneratedApproval(target) {
+  function createGeneratedApproval(target, index) {
     var isContent = target.tagName === "ARTICLE";
+    if (!target.id) target.id = "vizantu-slide-" + String(index + 1).padStart(2, "0");
     var id = (isContent ? "conteudo-" : "secao-") + target.id;
     if (hasDirectApproval(target) || document.querySelector('.approval[data-id="' + id + '"]')) return;
 
@@ -45,11 +46,11 @@
     box.appendChild(actions);
     box.appendChild(textarea);
 
-    var destination = isContent ? target : target.querySelector(":scope > .shell") || target;
+    var destination = isContent ? target : target.querySelector(":scope > .shell, :scope > .deck, :scope > .container") || target;
     destination.appendChild(box);
   }
 
-  Array.prototype.forEach.call(document.querySelectorAll("section.band[id], article[id]"), createGeneratedApproval);
+  Array.prototype.forEach.call(document.querySelectorAll("section.band, section.slide, article.script[id]"), createGeneratedApproval);
   var boxes = Array.prototype.slice.call(document.querySelectorAll(".approval[data-id]"));
   if (!boxes.length) return;
 
