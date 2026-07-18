@@ -16,6 +16,7 @@ const VERCEL_ROOT = "vizantu-planos";
 const METADATA_PREFIX = "metadata/";
 const HTML_PREFIX = "plans/";
 const APPROVALS_PREFIX = "approvals/";
+const APPROVAL_EVENTS_PREFIX = "approval-events/";
 const LOCAL_ROOT = path.join(process.cwd(), ".data");
 const LOCAL_METADATA = path.join(LOCAL_ROOT, "metadata");
 const LOCAL_HTML = path.join(LOCAL_ROOT, "plans");
@@ -58,6 +59,14 @@ function htmlKey(slug: string) {
 
 function approvalsKey(slug: string) {
   return `${APPROVALS_PREFIX}${slug}.json`;
+}
+
+function approvalEventPrefix(slug: string) {
+  return `${VERCEL_ROOT}/${APPROVAL_EVENTS_PREFIX}${slug}/`;
+}
+
+function approvalEventKey(slug: string, eventId: string) {
+  return `${approvalEventPrefix(slug)}${eventId}.json`;
 }
 
 function localMetadataPath(slug: string) {
@@ -132,6 +141,7 @@ function emptyApprovals(slug: string): PlanApprovals {
 type ApprovalSnapshot = {
   approvals: PlanApprovals;
   etag?: string;
+  needsCompaction?: boolean;
 };
 
 type ApprovalMutation = (approvals: PlanApprovals) => PlanApprovals | null;
@@ -156,12 +166,80 @@ async function withApprovalMutationQueue<T>(slug: string, operation: () => Promi
   }
 }
 
+async function listVercelApprovalEvents(slug: string) {
+  const blobs = [];
+  let cursor: string | undefined;
+
+  do {
+    const result = await listVercelBlobs({ prefix: approvalEventPrefix(slug), cursor, limit: 1000 });
+    blobs.push(...result.blobs);
+    cursor = result.hasMore ? result.cursor : undefined;
+  } while (cursor);
+
+  return blobs;
+}
+
+function mergeApprovalEvents(approvals: PlanApprovals, events: ApprovalEvent[]) {
+  if (!events.length) return approvals;
+
+  const knownHistory = new Set(approvals.history.map((event) => event.id));
+  const history = [...approvals.history];
+  const eventIds = new Set(approvals.eventIds || []);
+
+  for (const event of events) {
+    eventIds.add(event.id);
+    if (!knownHistory.has(event.id)) {
+      knownHistory.add(event.id);
+      history.push(event);
+    }
+  }
+
+  history.sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
+  const items = approvals.items.map((item) => ({ ...item }));
+  const itemIndexes = new Map(items.map((item, index) => [item.id, index]));
+
+  for (const event of history) {
+    const index = itemIndexes.get(event.itemId);
+    const item: ApprovalItem = {
+      id: event.itemId,
+      title: event.itemTitle,
+      status: event.status,
+      comment: event.comment,
+      updatedAt: event.createdAt,
+    };
+    if (index === undefined) {
+      itemIndexes.set(event.itemId, items.length);
+      items.push(item);
+    } else {
+      items[index] = item;
+    }
+  }
+
+  const updatedAt = history.at(-1)?.createdAt || approvals.updatedAt;
+  return { ...approvals, items, history, eventIds: [...eventIds], updatedAt };
+}
+
 async function getVercelApprovalSnapshot(slug: string): Promise<ApprovalSnapshot> {
   const result = await getVercelBlob(`${VERCEL_ROOT}/${approvalsKey(slug)}`, { access: "public", useCache: false });
-  if (!result || result.statusCode !== 200) return { approvals: emptyApprovals(slug) };
+  const stored = !result || result.statusCode !== 200
+    ? emptyApprovals(slug)
+    : JSON.parse(await new Response(result.stream).text()) as PlanApprovals;
+  const knownEvents = new Set(stored.eventIds || []);
+  const eventBlobs = await listVercelApprovalEvents(slug);
+  const missingBlobs = eventBlobs.filter((blob) => {
+    const eventId = blob.pathname.slice(approvalEventPrefix(slug).length, -".json".length);
+    return !knownEvents.has(eventId);
+  });
+  const events = await Promise.all(missingBlobs.map(async (blob) => {
+    const eventResult = await getVercelBlob(blob.pathname, { access: "public", useCache: false });
+    if (!eventResult || eventResult.statusCode !== 200) return null;
+    return JSON.parse(await new Response(eventResult.stream).text()) as ApprovalEvent;
+  }));
+
   return {
-    approvals: JSON.parse(await new Response(result.stream).text()) as PlanApprovals,
-    etag: result.blob.etag,
+    approvals: mergeApprovalEvents(stored, events.filter((event): event is ApprovalEvent => Boolean(event))),
+    etag: result?.statusCode === 200 ? result.blob.etag : undefined,
+    needsCompaction: missingBlobs.length > 0,
   };
 }
 
@@ -182,7 +260,11 @@ export function summarizeApprovals(approvals: PlanApprovals): ApprovalSummary {
 
 export async function getPlanApprovals(slug: string): Promise<PlanApprovals> {
   if (usesVercelBlobs()) {
-    return (await getVercelApprovalSnapshot(slug)).approvals;
+    const snapshot = await getVercelApprovalSnapshot(slug);
+    if (snapshot.needsCompaction) {
+      writePlanApprovals(snapshot.approvals, { ifMatch: snapshot.etag }).catch(() => undefined);
+    }
+    return snapshot.approvals;
   }
 
   if (!usesNetlifyBlobs()) {
@@ -255,6 +337,15 @@ async function mutatePlanApprovals(slug: string, mutation: ApprovalMutation) {
   });
 }
 
+async function writeVercelApprovalEvent(slug: string, event: ApprovalEvent) {
+  await putVercelBlob(approvalEventKey(slug, event.id), JSON.stringify(event), {
+    access: "public",
+    addRandomSuffix: false,
+    allowOverwrite: false,
+    contentType: "application/json; charset=utf-8",
+  });
+}
+
 export async function listApprovalSummaries(slugs: string[]) {
   const entries = await Promise.all(
     slugs.map(async (slug) => [slug, summarizeApprovals(await getPlanApprovals(slug))] as const),
@@ -284,7 +375,7 @@ export async function recordApproval(input: {
   status: ApprovalStatus;
   comment: string;
 }) {
-  return mutatePlanApprovals(input.slug, (approvals) => {
+  const applyChange = (approvals: PlanApprovals) => {
     const now = new Date().toISOString();
     const index = approvals.items.findIndex((item) => item.id === input.itemId);
     const current = index >= 0
@@ -315,7 +406,7 @@ export async function recordApproval(input: {
           : "reopened"
       : "commented";
 
-    const history = [...approvals.history, {
+    const event: ApprovalEvent = {
       id: randomUUID(),
       itemId: input.itemId,
       itemTitle: input.itemTitle,
@@ -324,10 +415,27 @@ export async function recordApproval(input: {
       previousStatus: current.status,
       comment,
       createdAt: now,
-    }];
+    };
+    const history = [...approvals.history, event];
 
-    return { planSlug: input.slug, items, history, updatedAt: now };
-  });
+    return {
+      approvals: { ...approvals, planSlug: input.slug, items, history, updatedAt: now },
+      event,
+    };
+  };
+
+  if (usesVercelBlobs()) {
+    const snapshot = await getVercelApprovalSnapshot(input.slug);
+    const changed = applyChange(snapshot.approvals);
+    if (!changed) return snapshot.approvals;
+
+    changed.approvals.eventIds = [...new Set([...(changed.approvals.eventIds || []), changed.event.id])];
+    await writeVercelApprovalEvent(input.slug, changed.event);
+    writePlanApprovals(changed.approvals, { ifMatch: snapshot.etag }).catch(() => undefined);
+    return changed.approvals;
+  }
+
+  return mutatePlanApprovals(input.slug, (approvals) => applyChange(approvals)?.approvals || null);
 }
 
 export async function getPlan(slug: string): Promise<PlanWithHtml | null> {
@@ -463,10 +571,12 @@ export async function setPlanKind(slug: string, kind: PlanKind): Promise<Plan | 
 
 export async function deletePlan(slug: string) {
   if (usesVercelBlobs()) {
+    const eventBlobs = await listVercelApprovalEvents(slug);
     await delVercelBlobs([
       `${VERCEL_ROOT}/${htmlKey(slug)}`,
       `${VERCEL_ROOT}/${metadataKey(slug)}`,
       `${VERCEL_ROOT}/${approvalsKey(slug)}`,
+      ...eventBlobs.map((blob) => blob.pathname),
     ]);
     return true;
   }

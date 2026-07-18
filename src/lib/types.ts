@@ -43,6 +43,7 @@ export type PlanApprovals = {
   items: ApprovalItem[];
   history: ApprovalEvent[];
   updatedAt?: string;
+  eventIds?: string[];
 };
 
 export type ApprovalSummary = {
