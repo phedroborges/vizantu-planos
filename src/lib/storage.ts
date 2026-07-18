@@ -224,9 +224,15 @@ async function writePlanApprovals(approvals: PlanApprovals, options: { ifMatch?:
   return approvals;
 }
 
+function isApprovalWriteConflict(error: unknown) {
+  if (error instanceof BlobPreconditionFailedError) return true;
+  if (!(error instanceof Error)) return false;
+  return /precondition|conditional request|conflicting operation/i.test(error.message);
+}
+
 async function mutatePlanApprovals(slug: string, mutation: ApprovalMutation) {
   if (usesVercelBlobs()) {
-    for (let attempt = 0; attempt < 8; attempt += 1) {
+    for (let attempt = 0; attempt < 20; attempt += 1) {
       const snapshot = await getVercelApprovalSnapshot(slug);
       const next = mutation(snapshot.approvals);
       if (!next) return snapshot.approvals;
@@ -234,8 +240,9 @@ async function mutatePlanApprovals(slug: string, mutation: ApprovalMutation) {
       try {
         return await writePlanApprovals(next, { ifMatch: snapshot.etag });
       } catch (error) {
-        if (!(error instanceof BlobPreconditionFailedError)) throw error;
-        await new Promise((resolve) => setTimeout(resolve, 20 + attempt * 25));
+        if (!isApprovalWriteConflict(error)) throw error;
+        const backoff = Math.min(750, 60 + attempt * 45) + Math.floor(Math.random() * 180);
+        await new Promise((resolve) => setTimeout(resolve, backoff));
       }
     }
     throw new Error("As aprovações mudaram ao mesmo tempo muitas vezes. Tente novamente.");
