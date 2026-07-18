@@ -104,13 +104,49 @@ test("cria aprovações automaticamente por seção e conteúdo", async ({ page 
     await expect(page.locator('[data-id="conteudo-video-1"]')).toContainText("APROVAÇÃO DO CONTEÚDO");
 
     const objective = page.locator('[data-id="secao-objetivo"]');
-    await objective.locator("textarea").fill("Rever a meta principal.");
-    await objective.locator(".btn-adjust").click();
-    await expect(objective.locator(".btn-adjust")).toHaveClass(/active/);
+    await objective.locator(".vz-request").click();
+    await objective.locator(".vz-edit textarea").fill("Rever a meta principal.");
+    await objective.locator(".vz-send").click();
+    await expect(objective.locator(".vz-badge-changes")).toContainText("Ajuste solicitado");
 
     await page.goto(`/revisoes/${slug}`);
     await expect(page.locator(".approval-item")).toHaveCount(3);
     await expect(page.getByText("Rever a meta principal.", { exact: true }).first()).toBeVisible();
+  } finally {
+    await page.request.delete(`/api/plans/${slug}`);
+  }
+});
+
+test("apresentação não recebe fluxo de aprovação", async ({ page }, testInfo) => {
+  const slug = `apresentacao-${testInfo.project.name}`;
+  const html = `<!doctype html>
+    <html lang="pt-BR">
+      <head><meta charset="utf-8"><title>Apresentação</title></head>
+      <body>
+        <section class="band" id="proposta"><div class="shell"><span class="section-no">01 · Proposta</span><h2>Proposta comercial</h2></div></section>
+      </body>
+    </html>`;
+
+  const upload = await page.request.post("/api/plans", {
+    multipart: {
+      title: "Apresentação de proposta",
+      slug,
+      kind: "presentation",
+      file: { name: "apresentacao.html", mimeType: "text/html", buffer: Buffer.from(html) },
+    },
+  });
+  expect(upload.status()).toBe(201);
+
+  try {
+    await page.goto(`/${slug}`);
+    await expect(page.getByRole("heading", { name: "Proposta comercial" })).toBeVisible();
+    await expect(page.locator(".vz-generated-approval")).toHaveCount(0);
+    await expect(page.locator('script[data-vizantu-approval-client]')).toHaveCount(0);
+
+    const patched = await page.request.patch(`/api/plans/${slug}`, { data: { kind: "approval" } });
+    expect(patched.status()).toBe(200);
+    await page.goto(`/${slug}`);
+    await expect(page.locator(".vz-generated-approval")).toHaveCount(1);
   } finally {
     await page.request.delete(`/api/plans/${slug}`);
   }
@@ -144,11 +180,17 @@ test("salva parecer por conteúdo e preserva o histórico", async ({ page }, tes
 
   try {
     await page.goto(`/${slug}`);
-    await expect(page.locator(".vz-save-state")).toContainText("Ainda não avaliado");
-    await page.getByLabel("Comentário").fill("Trocar a abertura e manter o encerramento.");
-    await page.getByRole("button", { name: "Pedir ajuste" }).click();
-    await expect(page.getByRole("button", { name: "Pedir ajuste" })).toHaveClass(/active/);
-    await expect(page.locator(".vz-save-state")).toContainText("Salvo em");
+    const box = page.locator('.approval[data-id="conteudo-1"]');
+    await expect(box.locator(".vz-status-line")).toContainText("Aprove este conteúdo ou peça um ajuste.");
+
+    const send = box.locator(".vz-send");
+    await box.locator(".vz-request").click();
+    await expect(send).toBeDisabled();
+    await box.locator(".vz-edit textarea").fill("Trocar a abertura e manter o encerramento.");
+    await expect(send).toBeEnabled();
+    await send.click();
+    await expect(box.locator(".vz-badge-changes")).toContainText("Ajuste solicitado");
+    await expect(box.locator(".vz-badge-comment")).toContainText("Trocar a abertura e manter o encerramento.");
 
     await page.goto(`/revisoes/${slug}`);
     await expect(page.getByText("Plano com ajustes", { exact: true })).toBeVisible();
@@ -156,9 +198,10 @@ test("salva parecer por conteúdo e preserva o histórico", async ({ page }, tes
     await expect(page.getByText("Solicitou ajuste", { exact: true })).toBeVisible();
 
     await page.goto(`/${slug}`);
-    await expect(page.getByRole("button", { name: "Pedir ajuste" })).toHaveClass(/active/);
-    await page.getByRole("button", { name: "Aprovar" }).click();
-    await expect(page.getByRole("button", { name: "Aprovar" })).toHaveClass(/active/);
+    await expect(box.locator(".vz-badge-changes")).toContainText("Ajuste solicitado");
+    await box.locator(".vz-undo").click();
+    await box.locator(".vz-approve").click();
+    await expect(box.locator(".vz-badge-approved")).toContainText("Conteúdo aprovado");
 
     await page.goto(`/revisoes/${slug}`);
     await expect(page.getByText("Plano aprovado", { exact: true })).toBeVisible();

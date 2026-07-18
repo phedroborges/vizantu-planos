@@ -7,13 +7,14 @@ import {
   ExternalLink,
   FileArchive,
   FileCode2,
+  Presentation,
   Search,
   Trash2,
   UploadCloud,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toSlug } from "@/lib/slug";
-import type { ApprovalSummary, Plan } from "@/lib/types";
+import type { ApprovalSummary, Plan, PlanKind } from "@/lib/types";
 
 const emptySummary: ApprovalSummary = {
   total: 0,
@@ -61,6 +62,7 @@ export function Dashboard({
   const [summaries, setSummaries] = useState(initialSummaries);
   const [title, setTitle] = useState("");
   const [slug, setSlug] = useState("");
+  const [kind, setKind] = useState<PlanKind>("approval");
   const [slugTouched, setSlugTouched] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [query, setQuery] = useState("");
@@ -111,6 +113,7 @@ export function Dashboard({
     const body = new FormData();
     body.set("title", title);
     body.set("slug", slug);
+    body.set("kind", kind);
     body.set("file", file);
 
     const response = await fetch("/api/plans", { method: "POST", body });
@@ -125,12 +128,26 @@ export function Dashboard({
     setSlugTouched(false);
     setFile(null);
     if (fileInput.current) fileInput.current.value = "";
-    showToast("Plano publicado e pronto para aprovação.");
+    showToast(kind === "presentation" ? "Apresentação publicada, sem fluxo de aprovação." : "Plano publicado e pronto para aprovação.");
+    setKind("approval");
   }
 
   async function copyLink(slugToCopy: string) {
     await navigator.clipboard.writeText(`${window.location.origin}/${slugToCopy}`);
     showToast("Link copiado.");
+  }
+
+  async function toggleKind(plan: Plan) {
+    const nextKind: PlanKind = (plan.kind || "approval") === "approval" ? "presentation" : "approval";
+    const response = await fetch(`/api/plans/${plan.slug}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ kind: nextKind }),
+    });
+    if (!response.ok) return showToast("Não foi possível alterar o tipo do material.");
+    const result = await response.json();
+    setPlans((current) => current.map((item) => (item.slug === plan.slug ? result.plan : item)));
+    showToast(nextKind === "presentation" ? "Agora é uma apresentação, sem aprovação." : "Agora é um plano com aprovação.");
   }
 
   async function remove(plan: Plan) {
@@ -170,6 +187,14 @@ export function Dashboard({
             <form className="upload-form" onSubmit={upload}>
               <div className="field"><label htmlFor="title">Título</label><input id="title" value={title} onChange={(event) => updateTitle(event.target.value)} placeholder="Plano de julho · TerraNet" required maxLength={120} disabled={storageDisabled} /></div>
               <div className="field"><label htmlFor="slug">Endereço</label><input id="slug" value={slug} onChange={(event) => { setSlugTouched(true); setSlug(toSlug(event.target.value)); }} placeholder="plano-julho-terranet" required maxLength={80} disabled={storageDisabled} /><span className="slug-preview">{siteUrl || "meusite.com"}/{slug || "seu-endereco"}</span></div>
+              <div className="field">
+                <label>Tipo de material</label>
+                <div className="kind-toggle" role="radiogroup" aria-label="Tipo de material">
+                  <button type="button" role="radio" aria-checked={kind === "approval"} className={`kind-option ${kind === "approval" ? "active" : ""}`} onClick={() => setKind("approval")} disabled={storageDisabled}><ClipboardCheck size={14} /> Plano com aprovação</button>
+                  <button type="button" role="radio" aria-checked={kind === "presentation"} className={`kind-option ${kind === "presentation" ? "active" : ""}`} onClick={() => setKind("presentation")} disabled={storageDisabled}><Presentation size={14} /> Apresentação</button>
+                </div>
+                <span className="slug-preview">{kind === "approval" ? "O cliente aprova ou pede ajuste em cada conteúdo." : "Somente visualização, sem botões de aprovação."}</span>
+              </div>
               <label className={`dropzone ${isDragging ? "active" : ""}`} onDragOver={(event) => { event.preventDefault(); setIsDragging(true); }} onDragLeave={() => setIsDragging(false)} onDrop={(event) => { event.preventDefault(); setIsDragging(false); if (!storageError) pickFile(event.dataTransfer.files[0]); }}>
                 <input ref={fileInput} type="file" accept=".html,.zip,text/html,application/zip" onChange={(event) => pickFile(event.target.files?.[0])} disabled={storageDisabled} />
                 {file ? <div className="selected-file">{file.name.toLowerCase().endsWith(".zip") ? <FileArchive size={28} /> : <FileCode2 size={28} />}<div><strong>{file.name}</strong><span>{formatBytes(file.size)} · pronto para publicar</span></div></div> : <div><UploadCloud size={29} /><strong>Arraste o HTML ou ZIP</strong><span>Documento ou projeto completo de até 4 MB</span></div>}
@@ -184,13 +209,20 @@ export function Dashboard({
             {visiblePlans.length ? (
               <ul className="plan-list">
                 {visiblePlans.map((plan) => {
+                  const isPresentation = plan.kind === "presentation";
                   const approval = approvalPresentation(summaries[plan.slug] || emptySummary);
                   return (
                     <li className="plan-row" key={plan.slug}>
                       <div className="plan-title"><a href={`/${plan.slug}`} target="_blank" rel="noreferrer">{plan.title}</a><div className="plan-url">/{plan.slug}</div></div>
-                      <div className="plan-meta"><span className={`status ${approval.tone}`}>{approval.label}</span><br />{approval.detail}<br />{formatDate(plan.updatedAt)} · {formatBytes(plan.size)}</div>
+                      <div className="plan-meta">
+                        {isPresentation
+                          ? <><span className="status presentation"><Presentation size={11} /> Apresentação</span><br />Sem fluxo de aprovação</>
+                          : <><span className={`status ${approval.tone}`}>{approval.label}</span><br />{approval.detail}</>}
+                        <br />{formatDate(plan.updatedAt)} · {formatBytes(plan.size)}
+                      </div>
                       <div className="actions">
-                        <a className="icon-button approval-action" href={`/revisoes/${plan.slug}`} title="Acompanhar aprovações" aria-label={`Acompanhar aprovações de ${plan.title}`}><ClipboardCheck size={15} /></a>
+                        {isPresentation ? null : <a className="icon-button approval-action" href={`/revisoes/${plan.slug}`} title="Acompanhar aprovações" aria-label={`Acompanhar aprovações de ${plan.title}`}><ClipboardCheck size={15} /></a>}
+                        <button className="icon-button" onClick={() => toggleKind(plan)} title={isPresentation ? "Transformar em plano com aprovação" : "Transformar em apresentação (sem aprovação)"} aria-label={`Alterar tipo de ${plan.title}`}>{isPresentation ? <ClipboardCheck size={15} /> : <Presentation size={15} />}</button>
                         <button className="icon-button" onClick={() => copyLink(plan.slug)} title="Copiar link" aria-label={`Copiar link de ${plan.title}`}><Copy size={15} /></button>
                         <a className="icon-button" href={`/${plan.slug}`} target="_blank" rel="noreferrer" title="Abrir plano" aria-label={`Abrir ${plan.title}`}><ExternalLink size={15} /></a>
                         <button className="icon-button" onClick={() => remove(plan)} title="Excluir" aria-label={`Excluir ${plan.title}`}><Trash2 size={15} /></button>

@@ -18,7 +18,7 @@ function formatDate(value?: string) {
 
 function statusLabel(status: ApprovalStatus) {
   if (status === "approved") return "Aprovado";
-  if (status === "changes_requested") return "Pedir ajuste";
+  if (status === "changes_requested") return "Ajuste solicitado";
   return "Aguardando";
 }
 

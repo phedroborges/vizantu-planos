@@ -35,16 +35,7 @@
     headingElement.textContent = heading || label || "Revise este item";
     head.appendChild(kicker);
     head.appendChild(headingElement);
-
-    var actions = document.createElement("div");
-    actions.className = "vz-generated-actions";
-    actions.innerHTML = '<button type="button" class="btn-ok">Aprovar</button><button type="button" class="btn-adjust">Pedir ajuste</button>';
-    var textarea = document.createElement("textarea");
-    textarea.setAttribute("aria-label", "Comentário sobre " + title);
-    textarea.placeholder = "Escreva aqui o que precisa ser ajustado ou registre uma observação.";
     box.appendChild(head);
-    box.appendChild(actions);
-    box.appendChild(textarea);
 
     var destination = isContent ? target : target.querySelector(":scope > .shell, :scope > .deck, :scope > .container") || target;
     destination.appendChild(box);
@@ -57,26 +48,66 @@
   var apiUrl = "/api/plans/" + encodeURIComponent(slug) + "/approvals";
   var state = {};
   var busy = {};
+  var editing = {};
+
+  var CHECK_SVG = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path class="vz-check-path" d="M4 12.5 9.5 18 20 6.5"/></svg>';
 
   function addStyles() {
     var style = document.createElement("style");
     style.textContent = [
-      ".vz-approval-meta{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:9px;font:500 11px/1.4 Arial,sans-serif;color:#687068}",
-      ".vz-save-comment{border:1px solid currentColor;background:transparent;color:inherit;padding:6px 10px;border-radius:5px;cursor:pointer;font:600 11px Arial,sans-serif}",
-      ".vz-save-comment:hover{background:rgba(128,128,128,.08)}",
-      ".vz-save-comment:disabled,.approval button:disabled,.approval textarea:disabled{opacity:.55;cursor:wait}",
-      ".vz-save-state[data-state=error]{color:#b3312a}",
-      ".approval .btn-ok.active{background:#2f5f3c!important;border-color:#2f5f3c!important;color:#fff!important}",
-      ".approval .btn-adjust.active{background:#d65d32!important;border-color:#d65d32!important;color:#fff!important}",
+      /* esconde os controles antigos embutidos nos planos */
+      ".approval[data-id] .approval-btns{display:none!important}",
+      ".approval[data-id]>textarea{display:none!important}",
+      /* caixa gerada */
       ".vz-generated-approval{box-sizing:border-box;margin-top:32px;padding:20px;border:1px solid rgba(31,43,34,.18);border-radius:6px;background:#fff;color:#18201a;box-shadow:0 8px 24px rgba(25,35,27,.06);font-family:Arial,sans-serif}",
       ".vz-generated-head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:16px}",
       ".vz-generated-head span{flex:none;color:#749f1c;font:700 10px/1.4 Arial,sans-serif;letter-spacing:.08em}",
       ".vz-generated-head strong{max-width:680px;text-align:right;font:650 15px/1.4 Arial,sans-serif}",
-      ".vz-generated-actions{display:flex;gap:8px;margin-bottom:10px}",
-      ".vz-generated-approval .btn-ok,.vz-generated-approval .btn-adjust{min-height:36px;padding:8px 14px;border:1px solid #cbd2cc;border-radius:4px;background:#f7f8f6;color:#18201a;cursor:pointer;font:650 12px Arial,sans-serif}",
-      ".vz-generated-approval textarea{box-sizing:border-box;display:block;width:100%;min-height:88px;padding:12px;border:1px solid #cbd2cc;border-radius:4px;background:#fff;color:#18201a;resize:vertical;font:400 13px/1.5 Arial,sans-serif}",
-      ".vz-generated-approval textarea:focus{outline:2px solid rgba(132,181,35,.32);border-color:#84b523}",
-      "@media(max-width:640px){.vz-generated-approval{padding:16px}.vz-generated-head{display:block}.vz-generated-head strong{display:block;margin-top:6px;text-align:left}.vz-generated-actions{display:grid;grid-template-columns:1fr 1fr}.vz-generated-approval .btn-ok,.vz-generated-approval .btn-adjust{width:100%}}"
+      /* interface nova */
+      ".vz-ui{font-family:Arial,sans-serif;color:#18201a}",
+      ".vz-ui [hidden]{display:none!important}",
+      ".vz-choice{display:flex;gap:10px}",
+      ".vz-approve,.vz-request{display:inline-flex;align-items:center;gap:8px;min-height:40px;padding:9px 18px;border-radius:5px;cursor:pointer;font:650 13px Arial,sans-serif;transition:transform .12s ease,box-shadow .12s ease}",
+      ".vz-approve{border:1px solid #2f5f3c;background:#2f5f3c;color:#fff}",
+      ".vz-approve:hover{box-shadow:0 4px 14px rgba(47,95,60,.35);transform:translateY(-1px)}",
+      ".vz-request{border:1px solid #cbd2cc;background:#f7f8f6;color:#18201a}",
+      ".vz-request:hover{border-color:#d65d32;color:#a63d1e}",
+      ".vz-edit textarea{box-sizing:border-box;display:block;width:100%;min-height:96px;padding:12px;border:1px solid #d65d32;border-radius:5px;background:#fff;color:#18201a;resize:vertical;font:400 13px/1.5 Arial,sans-serif}",
+      ".vz-edit textarea:focus{outline:2px solid rgba(214,93,50,.25)}",
+      ".vz-edit-hint{margin:8px 0 10px;font:500 11px/1.5 Arial,sans-serif;color:#8a5a2b}",
+      ".vz-edit-actions{display:flex;gap:8px;margin-top:10px}",
+      ".vz-send{min-height:38px;padding:8px 16px;border:1px solid #d65d32;border-radius:5px;background:#d65d32;color:#fff;cursor:pointer;font:650 12px Arial,sans-serif}",
+      ".vz-send:disabled{opacity:.45;cursor:not-allowed}",
+      ".vz-cancel{min-height:38px;padding:8px 14px;border:1px solid #cbd2cc;border-radius:5px;background:transparent;color:#4c554d;cursor:pointer;font:600 12px Arial,sans-serif}",
+      /* veredito */
+      ".vz-badge{display:flex;align-items:flex-start;gap:12px;padding:14px 16px;border-radius:6px}",
+      ".vz-badge-approved{background:#eef7e4;border:1px solid #bcd98f}",
+      ".vz-badge-changes{background:#fdf0ea;border:1px solid #edbfa8}",
+      ".vz-badge-icon{flex:none;display:grid;place-items:center;width:34px;height:34px;border-radius:50%;color:#fff}",
+      ".vz-badge-approved .vz-badge-icon{background:#2f5f3c}",
+      ".vz-badge-changes .vz-badge-icon{background:#d65d32;font:700 15px Arial,sans-serif}",
+      ".vz-badge-body{flex:1;min-width:0}",
+      ".vz-badge-body strong{display:block;font:700 14px/1.3 Arial,sans-serif}",
+      ".vz-badge-approved strong{color:#2c5237}",
+      ".vz-badge-changes strong{color:#a63d1e}",
+      ".vz-badge-body small{display:block;margin-top:3px;font:500 11px/1.4 Arial,sans-serif;color:#687068}",
+      ".vz-badge-comment{margin:8px 0 0;padding:8px 10px;background:rgba(255,255,255,.75);border-left:3px solid #d65d32;font:400 12px/1.5 Arial,sans-serif;color:#42331f;white-space:pre-wrap;overflow-wrap:break-word}",
+      ".vz-badge-links{flex:none;display:flex;flex-direction:column;gap:6px;align-items:flex-end}",
+      ".vz-link{border:0;background:transparent;padding:2px 0;cursor:pointer;font:600 11px Arial,sans-serif;color:#5a6a52;text-decoration:underline}",
+      ".vz-link:hover{color:#18201a}",
+      /* animações */
+      "@keyframes vzBadgePop{0%{transform:scale(.9);opacity:0}70%{transform:scale(1.02)}100%{transform:scale(1);opacity:1}}",
+      "@keyframes vzIconPop{0%{transform:scale(.2)}65%{transform:scale(1.25)}100%{transform:scale(1)}}",
+      "@keyframes vzCheckDraw{from{stroke-dashoffset:26}to{stroke-dashoffset:0}}",
+      "@keyframes vzGlow{0%{box-shadow:0 0 0 0 rgba(47,95,60,.45)}100%{box-shadow:0 0 0 18px rgba(47,95,60,0)}}",
+      ".vz-anim.vz-badge{animation:vzBadgePop .45s ease}",
+      ".vz-anim .vz-badge-icon{animation:vzIconPop .5s cubic-bezier(.2,1.4,.4,1),vzGlow .9s ease .15s}",
+      ".vz-anim .vz-check-path{stroke-dasharray:26;animation:vzCheckDraw .4s ease .25s backwards}",
+      /* linha de status */
+      ".vz-status-line{margin-top:8px;font:500 11px/1.4 Arial,sans-serif;color:#687068}",
+      ".vz-status-line[data-state=error]{color:#b3312a;font-weight:700}",
+      ".vz-busy .vz-ui button,.vz-busy .vz-ui textarea{opacity:.55;pointer-events:none}",
+      "@media(max-width:640px){.vz-generated-approval{padding:16px}.vz-generated-head{display:block}.vz-generated-head strong{display:block;margin-top:6px;text-align:left}.vz-choice{display:grid;grid-template-columns:1fr 1fr}.vz-badge{flex-wrap:wrap}.vz-badge-links{flex-direction:row;width:100%;justify-content:flex-end}}"
     ].join("");
     document.head.appendChild(style);
   }
@@ -95,59 +126,108 @@
   }
 
   function formatDate(value) {
-    if (!value) return "Ainda não avaliado";
+    if (!value) return "";
     try {
-      return "Salvo em " + new Intl.DateTimeFormat("pt-BR", {
+      return new Intl.DateTimeFormat("pt-BR", {
         day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit"
       }).format(new Date(value));
     } catch {
-      return "Avaliação salva";
+      return "";
     }
   }
 
   function enhanceBox(box) {
     if (box.dataset.vizantuReady) return;
     box.dataset.vizantuReady = "true";
-    var textarea = box.querySelector("textarea");
-    if (!textarea) return;
 
-    var meta = document.createElement("div");
-    meta.className = "vz-approval-meta";
-    meta.innerHTML = '<span class="vz-save-state">Conectando à aprovação...</span><button type="button" class="vz-save-comment">Salvar comentário</button>';
-    textarea.insertAdjacentElement("afterend", meta);
+    var ui = document.createElement("div");
+    ui.className = "vz-ui";
+    ui.innerHTML =
+      '<div class="vz-choice">' +
+        '<button type="button" class="vz-approve">' + CHECK_SVG + ' Aprovar</button>' +
+        '<button type="button" class="vz-request">Pedir ajuste</button>' +
+      '</div>' +
+      '<div class="vz-edit" hidden>' +
+        '<textarea aria-label="Descreva o ajuste" placeholder="Descreva aqui o que você quer ajustar neste conteúdo…"></textarea>' +
+        '<p class="vz-edit-hint">Escreva o que precisa mudar e confirme. O pedido de ajuste só é enviado depois que você escrever.</p>' +
+        '<div class="vz-edit-actions">' +
+          '<button type="button" class="vz-send" disabled>Enviar pedido de ajuste</button>' +
+          '<button type="button" class="vz-cancel">Cancelar</button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="vz-verdict" hidden></div>' +
+      '<div class="vz-status-line">Conectando à aprovação...</div>';
+    box.appendChild(ui);
   }
 
   function setBusy(box, value) {
     var id = box.dataset.id;
     busy[id] = value;
-    Array.prototype.forEach.call(box.querySelectorAll("button, textarea"), function (control) {
-      control.disabled = value;
-    });
-    var label = box.querySelector(".vz-save-state");
+    box.classList.toggle("vz-busy", value);
+    var label = box.querySelector(".vz-status-line");
     if (value && label) {
       label.dataset.state = "saving";
       label.textContent = "Salvando...";
     }
   }
 
-  function renderBox(box) {
-    var item = state[box.dataset.id] || { status: "pending", comment: "" };
-    var ok = box.querySelector(".btn-ok");
-    var adjust = box.querySelector(".btn-adjust");
-    var textarea = box.querySelector("textarea");
-    var label = box.querySelector(".vz-save-state");
-    if (ok) {
-      ok.classList.toggle("active", item.status === "approved");
-      ok.setAttribute("aria-pressed", item.status === "approved" ? "true" : "false");
+  function escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, function (char) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char];
+    });
+  }
+
+  function renderBox(box, animate) {
+    var id = box.dataset.id;
+    var item = state[id] || { status: "pending", comment: "" };
+    var choice = box.querySelector(".vz-choice");
+    var edit = box.querySelector(".vz-edit");
+    var verdict = box.querySelector(".vz-verdict");
+    var label = box.querySelector(".vz-status-line");
+    if (!choice || !edit || !verdict) return;
+
+    var mode = editing[id] ? "edit" : item.status === "approved" ? "approved" : item.status === "changes_requested" ? "changes" : "choice";
+
+    choice.hidden = mode !== "choice";
+    edit.hidden = mode !== "edit";
+    verdict.hidden = mode !== "approved" && mode !== "changes";
+
+    if (mode === "edit") {
+      var textarea = edit.querySelector("textarea");
+      if (textarea && document.activeElement !== textarea && !textarea.value) textarea.value = item.comment || "";
+      var send = edit.querySelector(".vz-send");
+      if (send && textarea) send.disabled = !textarea.value.trim();
     }
-    if (adjust) {
-      adjust.classList.toggle("active", item.status === "changes_requested");
-      adjust.setAttribute("aria-pressed", item.status === "changes_requested" ? "true" : "false");
+
+    if (mode === "approved") {
+      verdict.innerHTML =
+        '<div class="vz-badge vz-badge-approved' + (animate ? " vz-anim" : "") + '">' +
+          '<span class="vz-badge-icon">' + CHECK_SVG + '</span>' +
+          '<div class="vz-badge-body"><strong>Conteúdo aprovado ✓</strong><small>' +
+            (item.updatedAt ? "Aprovado em " + formatDate(item.updatedAt) : "Aprovação registrada") +
+          '</small></div>' +
+          '<div class="vz-badge-links"><button type="button" class="vz-link vz-undo">Desfazer</button></div>' +
+        '</div>';
+    } else if (mode === "changes") {
+      verdict.innerHTML =
+        '<div class="vz-badge vz-badge-changes' + (animate ? " vz-anim" : "") + '">' +
+          '<span class="vz-badge-icon">✎</span>' +
+          '<div class="vz-badge-body"><strong>Ajuste solicitado</strong><small>' +
+            (item.updatedAt ? "Enviado em " + formatDate(item.updatedAt) : "Pedido registrado") +
+          '</small>' +
+          (item.comment ? '<p class="vz-badge-comment">' + escapeHtml(item.comment) + '</p>' : "") +
+          '</div>' +
+          '<div class="vz-badge-links"><button type="button" class="vz-link vz-edit-request">Editar pedido</button><button type="button" class="vz-link vz-undo">Desfazer</button></div>' +
+        '</div>';
+    } else {
+      verdict.innerHTML = "";
     }
-    if (textarea && document.activeElement !== textarea) textarea.value = item.comment || "";
-    if (label && !busy[box.dataset.id]) {
+
+    if (label && !busy[id]) {
       label.dataset.state = "saved";
-      label.textContent = formatDate(item.updatedAt);
+      if (mode === "choice") label.textContent = "Aprove este conteúdo ou peça um ajuste.";
+      else if (mode === "edit") label.textContent = "O pedido é enviado quando você confirmar.";
+      else label.textContent = item.updatedAt ? "Salvo em " + formatDate(item.updatedAt) : "";
     }
   }
 
@@ -165,9 +245,9 @@
     var lines = [document.title + " — Parecer do cliente", ""];
     boxes.forEach(function (box) {
       var item = state[box.dataset.id] || { status: "pending", comment: "" };
-      var label = item.status === "approved" ? "APROVADO" : item.status === "changes_requested" ? "PEDIR AJUSTE" : "SEM AVALIAÇÃO";
+      var label = item.status === "approved" ? "APROVADO" : item.status === "changes_requested" ? "AJUSTE SOLICITADO" : "SEM AVALIAÇÃO";
       lines.push((box.dataset.title || box.dataset.id) + ": " + label);
-      if (item.comment) lines.push('Comentário: "' + item.comment + '"');
+      if (item.comment && item.status === "changes_requested") lines.push('Ajuste: "' + item.comment + '"');
       lines.push("");
     });
     return lines.join("\n");
@@ -190,33 +270,37 @@
   function applyApprovals(approvals) {
     state = {};
     (approvals.items || []).forEach(function (item) { state[item.id] = item; });
-    boxes.forEach(renderBox);
+    boxes.forEach(function (box) { renderBox(box, false); });
     renderSummary();
   }
 
   function showError(box, message) {
-    var label = box.querySelector(".vz-save-state");
+    var label = box.querySelector(".vz-status-line");
     if (label) {
       label.dataset.state = "error";
       label.textContent = message || "Não foi possível salvar. Tente novamente.";
     }
   }
 
-  function save(box, nextStatus) {
+  function save(box, nextStatus, comment) {
     var id = box.dataset.id;
     if (busy[id]) return;
-    var textarea = box.querySelector("textarea");
     setBusy(box, true);
     api({
       action: "record",
       itemId: id,
       itemTitle: box.dataset.title || id,
-      status: nextStatus || "pending",
-      comment: textarea ? textarea.value : ""
+      status: nextStatus,
+      comment: comment
     }).then(function (data) {
-      applyApprovals(data.approvals);
+      state = {};
+      (data.approvals.items || []).forEach(function (item) { state[item.id] = item; });
+      editing[id] = false;
+      var textarea = box.querySelector(".vz-edit textarea");
+      if (textarea) textarea.value = "";
       setBusy(box, false);
-      renderBox(box);
+      boxes.forEach(function (other) { renderBox(other, other === box); });
+      renderSummary();
     }).catch(function (error) {
       setBusy(box, false);
       showError(box, error.message);
@@ -236,17 +320,56 @@
       return;
     }
 
-    var button = target.closest(".btn-ok, .btn-adjust, .vz-save-comment");
+    var button = target.closest(".vz-approve, .vz-request, .vz-send, .vz-cancel, .vz-undo, .vz-edit-request");
     if (!button) return;
     var box = button.closest(".approval[data-id]");
     if (!box) return;
     event.preventDefault();
     event.stopImmediatePropagation();
-    var current = state[box.dataset.id] || { status: "pending" };
-    var nextStatus = current.status;
-    if (button.classList.contains("btn-ok")) nextStatus = current.status === "approved" ? "pending" : "approved";
-    if (button.classList.contains("btn-adjust")) nextStatus = current.status === "changes_requested" ? "pending" : "changes_requested";
-    save(box, nextStatus);
+    var id = box.dataset.id;
+    var item = state[id] || { status: "pending", comment: "" };
+
+    if (button.classList.contains("vz-approve")) {
+      save(box, "approved", "");
+      return;
+    }
+    if (button.classList.contains("vz-request") || button.classList.contains("vz-edit-request")) {
+      editing[id] = true;
+      renderBox(box, false);
+      var textarea = box.querySelector(".vz-edit textarea");
+      if (textarea) {
+        if (!textarea.value) textarea.value = item.comment || "";
+        textarea.focus();
+      }
+      return;
+    }
+    if (button.classList.contains("vz-cancel")) {
+      editing[id] = false;
+      var field = box.querySelector(".vz-edit textarea");
+      if (field) field.value = "";
+      renderBox(box, false);
+      return;
+    }
+    if (button.classList.contains("vz-send")) {
+      var input = box.querySelector(".vz-edit textarea");
+      var comment = input ? input.value.trim() : "";
+      if (!comment) return;
+      save(box, "changes_requested", comment);
+      return;
+    }
+    if (button.classList.contains("vz-undo")) {
+      save(box, "pending", item.status === "changes_requested" ? item.comment || "" : "");
+      return;
+    }
+  }
+
+  function handleInput(event) {
+    var textarea = event.target;
+    if (!textarea || !textarea.closest || !textarea.closest(".vz-edit")) return;
+    var box = textarea.closest(".approval[data-id]");
+    if (!box) return;
+    var send = box.querySelector(".vz-send");
+    if (send) send.disabled = !textarea.value.trim();
   }
 
   addStyles();
@@ -255,13 +378,14 @@
     setBusy(box, true);
   });
   document.addEventListener("click", handleClick, true);
+  document.addEventListener("input", handleInput, true);
 
   api({
     action: "sync",
     items: boxes.map(function (box) { return { id: box.dataset.id, title: box.dataset.title || box.dataset.id }; })
   }).then(function (data) {
     applyApprovals(data.approvals);
-    boxes.forEach(function (box) { setBusy(box, false); renderBox(box); });
+    boxes.forEach(function (box) { setBusy(box, false); renderBox(box, false); });
   }).catch(function (error) {
     boxes.forEach(function (box) { setBusy(box, false); showError(box, error.message); });
   });

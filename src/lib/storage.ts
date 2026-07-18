@@ -3,7 +3,7 @@ import { del as delVercelBlobs, get as getVercelBlob, list as listVercelBlobs, p
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { ApprovalEvent, ApprovalItem, ApprovalStatus, ApprovalSummary, Plan, PlanApprovals, PlanWithHtml } from "@/lib/types";
+import type { ApprovalEvent, ApprovalItem, ApprovalStatus, ApprovalSummary, Plan, PlanApprovals, PlanKind, PlanWithHtml } from "@/lib/types";
 
 const STORE_NAME = "vizantu-planos";
 const VERCEL_ROOT = "vizantu-planos";
@@ -299,6 +299,7 @@ export async function savePlan(input: {
   originalName: string;
   html: string;
   size: number;
+  kind?: PlanKind;
 }) {
   const existing = await getPlan(input.slug);
   const now = new Date().toISOString();
@@ -309,6 +310,7 @@ export async function savePlan(input: {
     size: input.size,
     createdAt: existing?.plan.createdAt || now,
     updatedAt: now,
+    kind: input.kind || existing?.plan.kind || "approval",
   };
 
   if (usesVercelBlobs()) {
@@ -350,6 +352,39 @@ export async function savePlan(input: {
     store.set(htmlKey(input.slug), input.html),
     store.setJSON(metadataKey(input.slug), plan),
   ]);
+  return plan;
+}
+
+export async function setPlanKind(slug: string, kind: PlanKind): Promise<Plan | null> {
+  if (usesVercelBlobs()) {
+    const metadataPath = `${VERCEL_ROOT}/${metadataKey(slug)}`;
+    const result = await getVercelBlob(metadataPath, { access: "public", useCache: false });
+    if (!result || result.statusCode !== 200) return null;
+    const plan = { ...JSON.parse(await new Response(result.stream).text()) as Plan, kind, updatedAt: new Date().toISOString() };
+    await putVercelBlob(metadataPath, JSON.stringify(plan), {
+      access: "public",
+      addRandomSuffix: false,
+      allowOverwrite: true,
+      contentType: "application/json; charset=utf-8",
+    });
+    return plan;
+  }
+
+  if (!usesNetlifyBlobs()) {
+    try {
+      const plan = { ...JSON.parse(await readFile(localMetadataPath(slug), "utf8")) as Plan, kind, updatedAt: new Date().toISOString() };
+      await writeFile(localMetadataPath(slug), JSON.stringify(plan), "utf8");
+      return plan;
+    } catch {
+      return null;
+    }
+  }
+
+  const store = netlifyStore();
+  const raw = await store.get(metadataKey(slug), { type: "text" });
+  if (!raw) return null;
+  const plan = { ...JSON.parse(raw) as Plan, kind, updatedAt: new Date().toISOString() };
+  await store.setJSON(metadataKey(slug), plan);
   return plan;
 }
 

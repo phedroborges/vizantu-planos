@@ -4,14 +4,22 @@ import { getPlan } from "@/lib/storage";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function addApprovalClient(html: string, slug: string) {
+function addStorageShim(html: string) {
   const storageShim = `<script data-vizantu-storage-shim>(function(){function memory(){var values={};return{getItem:function(key){return Object.prototype.hasOwnProperty.call(values,key)?values[key]:null},setItem:function(key,value){values[key]=String(value)},removeItem:function(key){delete values[key]},clear:function(){values={}},key:function(index){return Object.keys(values)[index]||null},get length(){return Object.keys(values).length}}}["localStorage","sessionStorage"].forEach(function(name){try{window[name].getItem("__vizantu_test__")}catch(error){try{Object.defineProperty(window,name,{configurable:true,value:memory()})}catch(ignore){}}})})();</script>`;
-  if (!html.includes("data-vizantu-storage-shim")) {
-    html = /<head(?:\s[^>]*)?>/i.test(html) ? html.replace(/<head(?:\s[^>]*)?>/i, (head) => `${head}${storageShim}`) : `${storageShim}${html}`;
-  }
+  if (html.includes("data-vizantu-storage-shim")) return html;
+  return /<head(?:\s[^>]*)?>/i.test(html) ? html.replace(/<head(?:\s[^>]*)?>/i, (head) => `${head}${storageShim}`) : `${storageShim}${html}`;
+}
+
+function addApprovalClient(html: string, slug: string) {
   if (html.includes("data-vizantu-approval-client")) return html;
   const client = `<script src="/approval-client.js" data-plan-slug="${slug}" data-vizantu-approval-client defer></script>`;
   return /<\/body>/i.test(html) ? html.replace(/<\/body>/i, `${client}</body>`) : `${html}${client}`;
+}
+
+function hideApprovalMarkup(html: string) {
+  if (html.includes("data-vizantu-presentation")) return html;
+  const style = `<style data-vizantu-presentation>.approval,[id^="appr-"]{display:none!important}</style>`;
+  return /<\/head>/i.test(html) ? html.replace(/<\/head>/i, `${style}</head>`) : `${style}${html}`;
 }
 
 function notFound() {
@@ -27,7 +35,11 @@ export async function GET(_: Request, { params }: { params: Promise<{ slug: stri
   const result = await getPlan(slug);
   if (!result) return notFound();
 
-  return new Response(addApprovalClient(result.html, slug), {
+  const isPresentation = result.plan.kind === "presentation";
+  const base = addStorageShim(result.html);
+  const html = isPresentation ? hideApprovalMarkup(base) : addApprovalClient(base, slug);
+
+  return new Response(html, {
     headers: {
       "Content-Type": "text/html; charset=utf-8",
       "Content-Security-Policy": "sandbox allow-scripts allow-forms allow-modals allow-downloads allow-popups",

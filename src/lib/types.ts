@@ -1,3 +1,5 @@
+export type PlanKind = "approval" | "presentation";
+
 export type Plan = {
   slug: string;
   title: string;
@@ -5,6 +7,7 @@ export type Plan = {
   size: number;
   createdAt: string;
   updatedAt: string;
+  kind?: PlanKind;
   htmlUrl?: string;
   metadataUrl?: string;
 };

@@ -11,6 +11,7 @@ const MAX_FILE_SIZE = 4 * 1024 * 1024;
 const inputSchema = z.object({
   title: z.string().trim().min(3).max(120),
   slug: z.string().trim().min(3).max(80),
+  kind: z.enum(["approval", "presentation"]).default("approval"),
 });
 
 export async function POST(request: Request) {
@@ -19,6 +20,7 @@ export async function POST(request: Request) {
     const parsed = inputSchema.safeParse({
       title: String(formData.get("title") || ""),
       slug: String(formData.get("slug") || ""),
+      kind: String(formData.get("kind") || "approval"),
     });
     if (!parsed.success) return NextResponse.json({ error: "Revise o título e o endereço do plano." }, { status: 400 });
 
@@ -38,6 +40,7 @@ export async function POST(request: Request) {
       originalName: prepared.originalName,
       html: prepared.html,
       size: prepared.size,
+      kind: parsed.data.kind,
     });
 
     return NextResponse.json({ plan, url: `/${slug}` }, { status: 201 });
