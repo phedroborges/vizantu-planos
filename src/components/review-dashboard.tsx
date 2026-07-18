@@ -70,10 +70,18 @@ export function ReviewDashboard({ plan, initialApprovals }: { plan: Plan; initia
 
   useEffect(() => {
     const initialRefresh = window.setTimeout(() => refresh(true), 0);
-    const refreshTimer = window.setInterval(() => refresh(true), 5_000);
+    const refreshTimer = window.setInterval(() => refresh(true), 2_000);
+    const refreshOnFocus = () => refresh(true);
+    const refreshOnVisibility = () => {
+      if (!document.hidden) refresh(true);
+    };
+    window.addEventListener("focus", refreshOnFocus);
+    document.addEventListener("visibilitychange", refreshOnVisibility);
     return () => {
       window.clearTimeout(initialRefresh);
       window.clearInterval(refreshTimer);
+      window.removeEventListener("focus", refreshOnFocus);
+      document.removeEventListener("visibilitychange", refreshOnVisibility);
     };
   }, [refresh]);
 

@@ -1,6 +1,95 @@
 import { expect, test } from "@playwright/test";
 import { strToU8, zipSync } from "fflate";
 
+test("preserva pareceres simultâneos sem perder histórico", async ({ page }, testInfo) => {
+  const slug = `concorrencia-${testInfo.project.name}`;
+  const html = `<!doctype html>
+    <html lang="pt-BR">
+      <head><meta charset="utf-8"><title>Plano concorrente</title></head>
+      <body>
+        <div class="approval" data-id="item-1" data-title="Item 1"></div>
+        <div class="approval" data-id="item-2" data-title="Item 2"></div>
+      </body>
+    </html>`;
+
+  const upload = await page.request.post("/api/plans", {
+    multipart: {
+      title: "Plano concorrente",
+      slug,
+      file: { name: "concorrencia.html", mimeType: "text/html", buffer: Buffer.from(html) },
+    },
+  });
+  expect(upload.status()).toBe(201);
+
+  try {
+    await page.goto(`/${slug}`);
+    await expect(page.locator(".vz-status-line").first()).toContainText("Aprove este conteúdo");
+
+    const [first, second] = await Promise.all([
+      page.request.post(`/api/plans/${slug}/approvals`, {
+        data: { action: "record", itemId: "item-1", itemTitle: "Item 1", status: "approved", comment: "" },
+      }),
+      page.request.post(`/api/plans/${slug}/approvals`, {
+        data: { action: "record", itemId: "item-2", itemTitle: "Item 2", status: "changes_requested", comment: "Ajustar item 2." },
+      }),
+    ]);
+    expect(first.ok()).toBeTruthy();
+    expect(second.ok()).toBeTruthy();
+
+    const result = await page.request.get(`/api/plans/${slug}/approvals`);
+    const { approvals } = await result.json();
+    expect(approvals.items.find((item: { id: string }) => item.id === "item-1").status).toBe("approved");
+    expect(approvals.items.find((item: { id: string }) => item.id === "item-2")).toMatchObject({
+      status: "changes_requested",
+      comment: "Ajustar item 2.",
+    });
+    expect(approvals.history).toHaveLength(2);
+  } finally {
+    await page.request.delete(`/api/plans/${slug}`);
+  }
+});
+
+test("sincroniza duas telas e preserva comentário ainda não enviado", async ({ page, context }, testInfo) => {
+  const slug = `tempo-real-${testInfo.project.name}`;
+  const html = `<!doctype html>
+    <html lang="pt-BR">
+      <head><meta charset="utf-8"><title>Plano sincronizado</title></head>
+      <body>
+        <div class="approval" data-id="item-1" data-title="Item 1"></div>
+        <div class="approval" data-id="item-2" data-title="Item 2"></div>
+      </body>
+    </html>`;
+
+  const upload = await page.request.post("/api/plans", {
+    multipart: {
+      title: "Plano sincronizado",
+      slug,
+      file: { name: "tempo-real.html", mimeType: "text/html", buffer: Buffer.from(html) },
+    },
+  });
+  expect(upload.status()).toBe(201);
+
+  const secondPage = await context.newPage();
+  try {
+    await Promise.all([page.goto(`/${slug}`), secondPage.goto(`/${slug}`)]);
+    const firstBox = page.locator('[data-id="item-1"]');
+    const mirroredBox = secondPage.locator('[data-id="item-1"]');
+    const draftBox = secondPage.locator('[data-id="item-2"]');
+    await expect(firstBox.locator(".vz-approve")).toBeVisible();
+    await expect(draftBox.locator(".vz-request")).toBeVisible();
+
+    await draftBox.locator(".vz-request").click();
+    await draftBox.locator("textarea").fill("Comentário ainda em edição.");
+    await firstBox.locator(".vz-approve").click();
+
+    await expect(mirroredBox.locator(".vz-badge-approved")).toBeVisible({ timeout: 6_000 });
+    await expect(draftBox.locator("textarea")).toHaveValue("Comentário ainda em edição.");
+  } finally {
+    await secondPage.close();
+    await page.request.delete(`/api/plans/${slug}`);
+  }
+});
+
 test("publica, abre e exclui um HTML", async ({ page, context }, testInfo) => {
   const slug = `teste-${testInfo.project.name}`;
 

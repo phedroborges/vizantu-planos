@@ -49,6 +49,10 @@
   var state = {};
   var busy = {};
   var editing = {};
+  var dirty = {};
+  var saveQueue = Promise.resolve();
+  var lastUpdatedAt = 0;
+  var refreshInFlight = false;
 
   var CHECK_SVG = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path class="vz-check-path" d="M4 12.5 9.5 18 20 6.5"/></svg>';
 
@@ -125,6 +129,16 @@
     });
   }
 
+  function fetchApprovals() {
+    return fetch(apiUrl + "?t=" + Date.now(), {
+      method: "GET",
+      cache: "no-store"
+    }).then(function (response) {
+      if (!response.ok) throw new Error("Não foi possível atualizar as aprovações.");
+      return response.json();
+    });
+  }
+
   function formatDate(value) {
     if (!value) return "";
     try {
@@ -194,7 +208,7 @@
 
     if (mode === "edit") {
       var textarea = edit.querySelector("textarea");
-      if (textarea && document.activeElement !== textarea && !textarea.value) textarea.value = item.comment || "";
+      if (textarea && !dirty[id] && document.activeElement !== textarea) textarea.value = item.comment || "";
       var send = edit.querySelector(".vz-send");
       if (send && textarea) send.disabled = !textarea.value.trim();
     }
@@ -267,11 +281,27 @@
     }
   }
 
-  function applyApprovals(approvals) {
+  function applyApprovals(approvals, animatedBox) {
+    var updatedAt = Date.parse(approvals.updatedAt || "") || 0;
+    if (updatedAt && updatedAt < lastUpdatedAt) return false;
+    if (updatedAt) lastUpdatedAt = updatedAt;
     state = {};
     (approvals.items || []).forEach(function (item) { state[item.id] = item; });
-    boxes.forEach(function (box) { renderBox(box, false); });
+    boxes.forEach(function (box) { renderBox(box, box === animatedBox); });
     renderSummary();
+    return true;
+  }
+
+  function refreshApprovals() {
+    if (refreshInFlight) return;
+    refreshInFlight = true;
+    fetchApprovals().then(function (data) {
+      applyApprovals(data.approvals);
+    }).catch(function () {
+      // Uma falha breve de rede não deve interromper a revisão em andamento.
+    }).then(function () {
+      refreshInFlight = false;
+    });
   }
 
   function showError(box, message) {
@@ -286,21 +316,23 @@
     var id = box.dataset.id;
     if (busy[id]) return;
     setBusy(box, true);
-    api({
+    var payload = {
       action: "record",
       itemId: id,
       itemTitle: box.dataset.title || id,
       status: nextStatus,
       comment: comment
-    }).then(function (data) {
-      state = {};
-      (data.approvals.items || []).forEach(function (item) { state[item.id] = item; });
+    };
+    var request = saveQueue.catch(function () {}).then(function () { return api(payload); });
+    saveQueue = request.catch(function () {});
+
+    request.then(function (data) {
+      dirty[id] = false;
       editing[id] = false;
       var textarea = box.querySelector(".vz-edit textarea");
       if (textarea) textarea.value = "";
       setBusy(box, false);
-      boxes.forEach(function (other) { renderBox(other, other === box); });
-      renderSummary();
+      applyApprovals(data.approvals, box);
     }).catch(function (error) {
       setBusy(box, false);
       showError(box, error.message);
@@ -335,6 +367,7 @@
     }
     if (button.classList.contains("vz-request") || button.classList.contains("vz-edit-request")) {
       editing[id] = true;
+      dirty[id] = false;
       renderBox(box, false);
       var textarea = box.querySelector(".vz-edit textarea");
       if (textarea) {
@@ -345,6 +378,7 @@
     }
     if (button.classList.contains("vz-cancel")) {
       editing[id] = false;
+      dirty[id] = false;
       var field = box.querySelector(".vz-edit textarea");
       if (field) field.value = "";
       renderBox(box, false);
@@ -368,6 +402,7 @@
     if (!textarea || !textarea.closest || !textarea.closest(".vz-edit")) return;
     var box = textarea.closest(".approval[data-id]");
     if (!box) return;
+    dirty[box.dataset.id] = true;
     var send = box.querySelector(".vz-send");
     if (send) send.disabled = !textarea.value.trim();
   }
@@ -386,6 +421,11 @@
   }).then(function (data) {
     applyApprovals(data.approvals);
     boxes.forEach(function (box) { setBusy(box, false); renderBox(box, false); });
+    window.setInterval(refreshApprovals, 2_000);
+    window.addEventListener("focus", refreshApprovals);
+    document.addEventListener("visibilitychange", function () {
+      if (!document.hidden) refreshApprovals();
+    });
   }).catch(function (error) {
     boxes.forEach(function (box) { setBusy(box, false); showError(box, error.message); });
   });

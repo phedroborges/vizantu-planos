@@ -1,5 +1,11 @@
 import { getStore } from "@netlify/blobs";
-import { del as delVercelBlobs, get as getVercelBlob, list as listVercelBlobs, put as putVercelBlob } from "@vercel/blob";
+import {
+  BlobPreconditionFailedError,
+  del as delVercelBlobs,
+  get as getVercelBlob,
+  list as listVercelBlobs,
+  put as putVercelBlob,
+} from "@vercel/blob";
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -123,6 +129,42 @@ function emptyApprovals(slug: string): PlanApprovals {
   return { planSlug: slug, items: [], history: [] };
 }
 
+type ApprovalSnapshot = {
+  approvals: PlanApprovals;
+  etag?: string;
+};
+
+type ApprovalMutation = (approvals: PlanApprovals) => PlanApprovals | null;
+
+const approvalMutationQueues = new Map<string, Promise<void>>();
+
+async function withApprovalMutationQueue<T>(slug: string, operation: () => Promise<T>) {
+  const previous = approvalMutationQueues.get(slug) ?? Promise.resolve();
+  let release = () => {};
+  const current = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const queued = previous.catch(() => undefined).then(() => current);
+  approvalMutationQueues.set(slug, queued);
+
+  await previous.catch(() => undefined);
+  try {
+    return await operation();
+  } finally {
+    release();
+    if (approvalMutationQueues.get(slug) === queued) approvalMutationQueues.delete(slug);
+  }
+}
+
+async function getVercelApprovalSnapshot(slug: string): Promise<ApprovalSnapshot> {
+  const result = await getVercelBlob(`${VERCEL_ROOT}/${approvalsKey(slug)}`, { access: "public", useCache: false });
+  if (!result || result.statusCode !== 200) return { approvals: emptyApprovals(slug) };
+  return {
+    approvals: JSON.parse(await new Response(result.stream).text()) as PlanApprovals,
+    etag: result.blob.etag,
+  };
+}
+
 export function summarizeApprovals(approvals: PlanApprovals): ApprovalSummary {
   const total = approvals.items.length;
   const approved = approvals.items.filter((item) => item.status === "approved").length;
@@ -140,9 +182,7 @@ export function summarizeApprovals(approvals: PlanApprovals): ApprovalSummary {
 
 export async function getPlanApprovals(slug: string): Promise<PlanApprovals> {
   if (usesVercelBlobs()) {
-    const result = await getVercelBlob(`${VERCEL_ROOT}/${approvalsKey(slug)}`, { access: "public", useCache: false });
-    if (!result || result.statusCode !== 200) return emptyApprovals(slug);
-    return JSON.parse(await new Response(result.stream).text()) as PlanApprovals;
+    return (await getVercelApprovalSnapshot(slug)).approvals;
   }
 
   if (!usesNetlifyBlobs()) {
@@ -162,13 +202,14 @@ export async function getPlanApprovals(slug: string): Promise<PlanApprovals> {
   }
 }
 
-async function writePlanApprovals(approvals: PlanApprovals) {
+async function writePlanApprovals(approvals: PlanApprovals, options: { ifMatch?: string } = {}) {
   if (usesVercelBlobs()) {
     await putVercelBlob(`${VERCEL_ROOT}/${approvalsKey(approvals.planSlug)}`, JSON.stringify(approvals), {
       access: "public",
       addRandomSuffix: false,
       allowOverwrite: true,
       contentType: "application/json; charset=utf-8",
+      ifMatch: options.ifMatch,
     });
     return approvals;
   }
@@ -183,6 +224,30 @@ async function writePlanApprovals(approvals: PlanApprovals) {
   return approvals;
 }
 
+async function mutatePlanApprovals(slug: string, mutation: ApprovalMutation) {
+  if (usesVercelBlobs()) {
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const snapshot = await getVercelApprovalSnapshot(slug);
+      const next = mutation(snapshot.approvals);
+      if (!next) return snapshot.approvals;
+
+      try {
+        return await writePlanApprovals(next, { ifMatch: snapshot.etag });
+      } catch (error) {
+        if (!(error instanceof BlobPreconditionFailedError)) throw error;
+        await new Promise((resolve) => setTimeout(resolve, 20 + attempt * 25));
+      }
+    }
+    throw new Error("As aprovações mudaram ao mesmo tempo muitas vezes. Tente novamente.");
+  }
+
+  return withApprovalMutationQueue(slug, async () => {
+    const approvals = await getPlanApprovals(slug);
+    const next = mutation(approvals);
+    return next ? writePlanApprovals(next) : approvals;
+  });
+}
+
 export async function listApprovalSummaries(slugs: string[]) {
   const entries = await Promise.all(
     slugs.map(async (slug) => [slug, summarizeApprovals(await getPlanApprovals(slug))] as const),
@@ -191,18 +256,18 @@ export async function listApprovalSummaries(slugs: string[]) {
 }
 
 export async function syncApprovalItems(slug: string, items: Array<Pick<ApprovalItem, "id" | "title">>) {
-  const approvals = await getPlanApprovals(slug);
-  const current = new Map(approvals.items.map((item) => [item.id, item]));
-  const syncedItems = items.map((item) => ({
-    id: item.id,
-    title: item.title,
-    status: current.get(item.id)?.status || "pending" as ApprovalStatus,
-    comment: current.get(item.id)?.comment || "",
-    updatedAt: current.get(item.id)?.updatedAt,
-  }));
-  const changed = JSON.stringify(syncedItems) !== JSON.stringify(approvals.items);
-  if (!changed) return approvals;
-  return writePlanApprovals({ ...approvals, items: syncedItems, updatedAt: new Date().toISOString() });
+  return mutatePlanApprovals(slug, (approvals) => {
+    const current = new Map(approvals.items.map((item) => [item.id, item]));
+    const syncedItems = items.map((item) => ({
+      id: item.id,
+      title: item.title,
+      status: current.get(item.id)?.status || "pending" as ApprovalStatus,
+      comment: current.get(item.id)?.comment || "",
+      updatedAt: current.get(item.id)?.updatedAt,
+    }));
+    const changed = JSON.stringify(syncedItems) !== JSON.stringify(approvals.items);
+    return changed ? { ...approvals, items: syncedItems, updatedAt: new Date().toISOString() } : null;
+  });
 }
 
 export async function recordApproval(input: {
@@ -212,49 +277,50 @@ export async function recordApproval(input: {
   status: ApprovalStatus;
   comment: string;
 }) {
-  const approvals = await getPlanApprovals(input.slug);
-  const now = new Date().toISOString();
-  const index = approvals.items.findIndex((item) => item.id === input.itemId);
-  const current = index >= 0
-    ? approvals.items[index]
-    : { id: input.itemId, title: input.itemTitle, status: "pending" as ApprovalStatus, comment: "" };
-  const comment = input.comment.trim();
+  return mutatePlanApprovals(input.slug, (approvals) => {
+    const now = new Date().toISOString();
+    const index = approvals.items.findIndex((item) => item.id === input.itemId);
+    const current = index >= 0
+      ? approvals.items[index]
+      : { id: input.itemId, title: input.itemTitle, status: "pending" as ApprovalStatus, comment: "" };
+    const comment = input.comment.trim();
 
-  if (current.status === input.status && current.comment === comment && current.title === input.itemTitle) {
-    return approvals;
-  }
+    if (current.status === input.status && current.comment === comment && current.title === input.itemTitle) {
+      return null;
+    }
 
-  const nextItem: ApprovalItem = {
-    id: input.itemId,
-    title: input.itemTitle,
-    status: input.status,
-    comment,
-    updatedAt: now,
-  };
-  const items = [...approvals.items];
-  if (index >= 0) items[index] = nextItem;
-  else items.push(nextItem);
+    const nextItem: ApprovalItem = {
+      id: input.itemId,
+      title: input.itemTitle,
+      status: input.status,
+      comment,
+      updatedAt: now,
+    };
+    const items = [...approvals.items];
+    if (index >= 0) items[index] = nextItem;
+    else items.push(nextItem);
 
-  const action: ApprovalEvent["action"] = current.status !== input.status
-    ? input.status === "approved"
-      ? "approved"
-      : input.status === "changes_requested"
-        ? "changes_requested"
-        : "reopened"
-    : "commented";
+    const action: ApprovalEvent["action"] = current.status !== input.status
+      ? input.status === "approved"
+        ? "approved"
+        : input.status === "changes_requested"
+          ? "changes_requested"
+          : "reopened"
+      : "commented";
 
-  const history = [...approvals.history, {
-    id: randomUUID(),
-    itemId: input.itemId,
-    itemTitle: input.itemTitle,
-    action,
-    status: input.status,
-    previousStatus: current.status,
-    comment,
-    createdAt: now,
-  }];
+    const history = [...approvals.history, {
+      id: randomUUID(),
+      itemId: input.itemId,
+      itemTitle: input.itemTitle,
+      action,
+      status: input.status,
+      previousStatus: current.status,
+      comment,
+      createdAt: now,
+    }];
 
-  return writePlanApprovals({ planSlug: input.slug, items, history, updatedAt: now });
+    return { planSlug: input.slug, items, history, updatedAt: now };
+  });
 }
 
 export async function getPlan(slug: string): Promise<PlanWithHtml | null> {
