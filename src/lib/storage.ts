@@ -154,7 +154,10 @@ async function readVercelText(pathname: string) {
   const blob = blobs.find((item) => item.pathname === pathname);
   if (!blob) return null;
 
-  const response = await fetch(blob.url, { cache: "no-store" });
+  const response = await fetch(blob.downloadUrl, {
+    cache: "no-store",
+    headers: { Accept: "application/octet-stream" },
+  });
   if (!response.ok) throw new Error(`Vercel Blob: leitura pública falhou com status ${response.status}.`);
   return { text: await response.text(), etag: blob.etag };
 }
