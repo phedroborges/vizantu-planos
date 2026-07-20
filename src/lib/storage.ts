@@ -117,9 +117,9 @@ async function listVercelPlans() {
   const { blobs } = await listVercelBlobs({ prefix: `${VERCEL_ROOT}/${METADATA_PREFIX}` });
   const plans = await Promise.all(
     blobs.map(async (blob) => {
-      const result = await getVercelBlob(blob.pathname, { access: "public", useCache: false });
-      if (!result || result.statusCode !== 200) return null;
-      return JSON.parse(await new Response(result.stream).text()) as Plan;
+      const result = await readVercelText(blob.pathname);
+      if (!result) return null;
+      return JSON.parse(result.text) as Plan;
     }),
   );
   return plans.filter((plan): plan is Plan => Boolean(plan));
@@ -136,6 +136,27 @@ export async function listPlans() {
 
 function emptyApprovals(slug: string): PlanApprovals {
   return { planSlug: slug, items: [], history: [] };
+}
+
+async function readVercelText(pathname: string) {
+  try {
+    const result = await getVercelBlob(pathname, { access: "public", useCache: false });
+    if (!result || result.statusCode !== 200) return null;
+    return {
+      text: await new Response(result.stream).text(),
+      etag: result.blob.etag,
+    };
+  } catch (error) {
+    if (!(error instanceof Error) || !/403|forbidden/i.test(error.message)) throw error;
+  }
+
+  const { blobs } = await listVercelBlobs({ prefix: pathname, limit: 100 });
+  const blob = blobs.find((item) => item.pathname === pathname);
+  if (!blob) return null;
+
+  const response = await fetch(blob.url, { cache: "no-store" });
+  if (!response.ok) throw new Error(`Vercel Blob: leitura pública falhou com status ${response.status}.`);
+  return { text: await response.text(), etag: blob.etag };
 }
 
 type ApprovalSnapshot = {
@@ -220,10 +241,10 @@ function mergeApprovalEvents(approvals: PlanApprovals, events: ApprovalEvent[]) 
 }
 
 async function getVercelApprovalSnapshot(slug: string): Promise<ApprovalSnapshot> {
-  const result = await getVercelBlob(`${VERCEL_ROOT}/${approvalsKey(slug)}`, { access: "public", useCache: false });
-  const stored = !result || result.statusCode !== 200
+  const result = await readVercelText(`${VERCEL_ROOT}/${approvalsKey(slug)}`);
+  const stored = !result
     ? emptyApprovals(slug)
-    : JSON.parse(await new Response(result.stream).text()) as PlanApprovals;
+    : JSON.parse(result.text) as PlanApprovals;
   const knownEvents = new Set(stored.eventIds || []);
   const eventBlobs = await listVercelApprovalEvents(slug);
   const missingBlobs = eventBlobs.filter((blob) => {
@@ -231,14 +252,14 @@ async function getVercelApprovalSnapshot(slug: string): Promise<ApprovalSnapshot
     return !knownEvents.has(eventId);
   });
   const events = await Promise.all(missingBlobs.map(async (blob) => {
-    const eventResult = await getVercelBlob(blob.pathname, { access: "public", useCache: false });
-    if (!eventResult || eventResult.statusCode !== 200) return null;
-    return JSON.parse(await new Response(eventResult.stream).text()) as ApprovalEvent;
+    const eventResult = await readVercelText(blob.pathname);
+    if (!eventResult) return null;
+    return JSON.parse(eventResult.text) as ApprovalEvent;
   }));
 
   return {
     approvals: mergeApprovalEvents(stored, events.filter((event): event is ApprovalEvent => Boolean(event))),
-    etag: result?.statusCode === 200 ? result.blob.etag : undefined,
+    etag: result?.etag,
     needsCompaction: missingBlobs.length > 0,
   };
 }
@@ -440,12 +461,12 @@ export async function recordApproval(input: {
 
 export async function getPlan(slug: string): Promise<PlanWithHtml | null> {
   if (usesVercelBlobs()) {
-    const metadataResult = await getVercelBlob(`${VERCEL_ROOT}/${metadataKey(slug)}`, { access: "public", useCache: false });
-    if (!metadataResult || metadataResult.statusCode !== 200) return null;
-    const plan = JSON.parse(await new Response(metadataResult.stream).text()) as Plan;
-    const htmlResult = await getVercelBlob(`${VERCEL_ROOT}/${htmlKey(slug)}`, { access: "public", useCache: false });
-    if (!htmlResult || htmlResult.statusCode !== 200) return null;
-    return { plan, html: await new Response(htmlResult.stream).text() };
+    const metadataResult = await readVercelText(`${VERCEL_ROOT}/${metadataKey(slug)}`);
+    if (!metadataResult) return null;
+    const plan = JSON.parse(metadataResult.text) as Plan;
+    const htmlResult = await readVercelText(`${VERCEL_ROOT}/${htmlKey(slug)}`);
+    if (!htmlResult) return null;
+    return { plan, html: htmlResult.text };
   }
 
   if (!usesNetlifyBlobs()) {
