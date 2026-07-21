@@ -22,6 +22,22 @@ function hideApprovalMarkup(html: string) {
   return /<\/head>/i.test(html) ? html.replace(/<\/head>/i, `${style}</head>`) : `${style}${html}`;
 }
 
+function addVizantuWatermark(html: string) {
+  if (html.includes("data-vizantu-watermark")) return html;
+  const badge =
+    `<style data-vizantu-watermark-style>` +
+    `[data-vizantu-watermark]{position:fixed;left:18px;bottom:18px;z-index:2147483000;display:flex;align-items:center;gap:9px;padding:9px 14px;border-radius:999px;background:rgba(16,16,16,.74);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);box-shadow:0 8px 24px rgba(0,0,0,.24);text-decoration:none;opacity:.9;transition:opacity .2s ease,transform .2s ease}` +
+    `[data-vizantu-watermark]:hover{opacity:1;transform:translateY(-1px)}` +
+    `[data-vizantu-watermark] span{font-family:Arial,Helvetica,sans-serif;font-size:8.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:rgba(255,255,255,.66);white-space:nowrap}` +
+    `[data-vizantu-watermark] img{height:15px;width:auto;display:block}` +
+    `@media print{[data-vizantu-watermark],[data-vizantu-watermark-style]{display:none!important}}` +
+    `@media(max-width:640px){[data-vizantu-watermark]{left:12px;bottom:12px;padding:7px 11px}[data-vizantu-watermark] span{display:none}}` +
+    `</style>` +
+    `<a href="https://vizantu.com.br" target="_blank" rel="noopener" data-vizantu-watermark aria-label="Plano criado pela Vizantu">` +
+    `<span>Plano criado por</span><img src="/brand/vizantu-white.svg" alt="Vizantu"></a>`;
+  return /<\/body>/i.test(html) ? html.replace(/<\/body>/i, `${badge}</body>`) : `${html}${badge}`;
+}
+
 function notFound() {
   return new Response(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Plano não encontrado</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f4f5f2;color:#151715;font-family:Arial,sans-serif}.box{max-width:520px;padding:40px;border:1px solid #dde1dc;background:white}span{color:#88b725;font-size:12px;font-weight:700;text-transform:uppercase}h1{font-size:38px;margin:12px 0}p{color:#687068;line-height:1.6}</style></head><body><main class="box"><span>Vizantu Planos</span><h1>Este plano não está disponível.</h1><p>Confira o endereço recebido ou solicite um novo link à equipe responsável.</p></main></body></html>`, {
     status: 404,
@@ -37,7 +53,8 @@ export async function GET(_: Request, { params }: { params: Promise<{ slug: stri
 
   const isPresentation = result.plan.kind === "presentation";
   const base = addStorageShim(result.html);
-  const html = isPresentation ? hideApprovalMarkup(base) : addApprovalClient(base, slug);
+  const withApproval = isPresentation ? hideApprovalMarkup(base) : addApprovalClient(base, slug);
+  const html = addVizantuWatermark(withApproval);
 
   return new Response(html, {
     headers: {
