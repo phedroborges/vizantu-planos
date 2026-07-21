@@ -2,8 +2,9 @@
 # Build: Next.js 16 + pnpm 11 + Node 22. Storage local em disco (volume persistente).
 
 FROM node:22.13.1-slim AS base
-ENV PNPM_HOME="/pnpm" PATH="/pnpm:$PATH" NEXT_TELEMETRY_DISABLED=1
-RUN corepack enable
+# Instala o pnpm direto via npm (evita o bug de assinatura do corepack no Node 22.13).
+ENV NEXT_TELEMETRY_DISABLED=1 COREPACK_INTEGRITY_KEYS=0
+RUN npm install -g pnpm@11.7.0
 WORKDIR /app
 
 # --- Dependências (roda os build scripts liberados: esbuild, sharp) ---
