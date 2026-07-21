@@ -169,7 +169,7 @@ export function Dashboard({
     <>
       <header className="topbar">
         <div className="app-shell topbar-inner">
-          <div className="brand"><span className="brand-mark">VZ</span><span>Vizantu Planos<small>Publicador de apresentações</small></span></div>
+          <div className="brand"><img className="brand-logo" src="/brand/vizantu-white.svg" alt="Vizantu" /><span>Planos<small>Publicador de apresentações</small></span></div>
         </div>
       </header>
       <main className="app-shell dashboard">

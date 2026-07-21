@@ -39,7 +39,7 @@ function addVizantuWatermark(html: string) {
 }
 
 function notFound() {
-  return new Response(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Plano não encontrado</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f4f5f2;color:#151715;font-family:Arial,sans-serif}.box{max-width:520px;padding:40px;border:1px solid #dde1dc;background:white}span{color:#88b725;font-size:12px;font-weight:700;text-transform:uppercase}h1{font-size:38px;margin:12px 0}p{color:#687068;line-height:1.6}</style></head><body><main class="box"><span>Vizantu Planos</span><h1>Este plano não está disponível.</h1><p>Confira o endereço recebido ou solicite um novo link à equipe responsável.</p></main></body></html>`, {
+  return new Response(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Plano não encontrado</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f6f5f8;color:#101010;font-family:Arial,sans-serif}.box{max-width:520px;padding:40px;border:1px solid #e6e1ee;background:white}span{color:#6435e7;font-size:12px;font-weight:700;text-transform:uppercase}h1{font-size:38px;margin:12px 0}p{color:#6b6674;line-height:1.6}</style></head><body><main class="box"><span>Vizantu Planos</span><h1>Este plano não está disponível.</h1><p>Confira o endereço recebido ou solicite um novo link à equipe responsável.</p></main></body></html>`, {
     status: 404,
     headers: { "Content-Type": "text/html; charset=utf-8", "X-Robots-Tag": "noindex, nofollow" },
   });
