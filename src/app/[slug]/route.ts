@@ -59,7 +59,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ slug: stri
   return new Response(html, {
     headers: {
       "Content-Type": "text/html; charset=utf-8",
-      "Content-Security-Policy": "sandbox allow-scripts allow-forms allow-modals allow-downloads allow-popups",
+      "Content-Security-Policy": "sandbox allow-scripts allow-forms allow-modals allow-downloads allow-popups allow-popups-to-escape-sandbox",
       "Cache-Control": "no-store, max-age=0",
       "Referrer-Policy": "strict-origin-when-cross-origin",
       "X-Content-Type-Options": "nosniff",
