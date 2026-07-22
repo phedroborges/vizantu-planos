@@ -53,6 +53,15 @@
   var saveQueue = Promise.resolve();
   var lastUpdatedAt = 0;
   var refreshInFlight = false;
+  var approverName = "";
+  var APPROVER_KEY = "vizantu-approver:" + slug;
+
+  function loadApprover() {
+    try { return (window.localStorage.getItem(APPROVER_KEY) || "").trim(); } catch (e) { return ""; }
+  }
+  function saveApprover(name) {
+    try { window.localStorage.setItem(APPROVER_KEY, name); } catch (e) {}
+  }
 
   var CHECK_SVG = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path class="vz-check-path" d="M4 12.5 9.5 18 20 6.5"/></svg>';
 
@@ -111,7 +120,20 @@
       ".vz-status-line{margin-top:8px;font:500 11px/1.4 Arial,sans-serif;color:#687068}",
       ".vz-status-line[data-state=error]{color:#b3312a;font-weight:700}",
       ".vz-busy .vz-ui button,.vz-busy .vz-ui textarea{opacity:.55;pointer-events:none}",
-      "@media(max-width:640px){.vz-generated-approval{padding:16px}.vz-generated-head{display:block}.vz-generated-head strong{display:block;margin-top:6px;text-align:left}.vz-choice{display:grid;grid-template-columns:1fr 1fr}.vz-badge{flex-wrap:wrap}.vz-badge-links{flex-direction:row;width:100%;justify-content:flex-end}}"
+      /* portao de identificacao */
+      ".vz-gate{position:fixed;inset:0;z-index:2147483600;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(20,16,28,.7);-webkit-backdrop-filter:blur(5px);backdrop-filter:blur(5px)}",
+      ".vz-gate-card{box-sizing:border-box;width:100%;max-width:420px;background:#fff;border-radius:16px;padding:30px 28px;box-shadow:0 24px 70px rgba(0,0,0,.4);font-family:Arial,Helvetica,sans-serif;color:#18201a}",
+      ".vz-gate-eyebrow{display:block;font:700 10px Arial,sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#9147ff;margin-bottom:10px}",
+      ".vz-gate-card h3{margin:0 0 8px;font:700 21px/1.25 Arial,sans-serif}",
+      ".vz-gate-card p{margin:0 0 20px;font:400 13px/1.55 Arial,sans-serif;color:#687068}",
+      ".vz-gate-card label{display:block;font:700 10px Arial,sans-serif;text-transform:uppercase;letter-spacing:.08em;color:#8a8f95;margin-bottom:7px}",
+      ".vz-gate-card input{box-sizing:border-box;width:100%;height:48px;padding:0 15px;border:1px solid #cbd2cc;border-radius:9px;font:500 15px Arial,sans-serif;color:#18201a}",
+      ".vz-gate-card input:focus{outline:2px solid rgba(145,71,255,.32);border-color:#9147ff}",
+      ".vz-gate-btn{margin-top:18px;width:100%;min-height:48px;border:0;border-radius:9px;background:#6435e7;color:#fff;font:700 14px Arial,sans-serif;cursor:pointer;transition:background .15s}",
+      ".vz-gate-btn:hover{background:#5324d6}",
+      ".vz-gate-err{margin-top:9px;font:600 12px Arial,sans-serif;color:#b3312a;min-height:15px}",
+      ".vz-badge-who{font-weight:700}",
+      "@media(max-width:640px){.vz-generated-approval{padding:16px}.vz-generated-head{display:block}.vz-generated-head strong{display:block;margin-top:6px;text-align:left}.vz-choice{display:grid;grid-template-columns:1fr 1fr}.vz-badge{flex-wrap:wrap}.vz-badge-links{flex-direction:row;width:100%;justify-content:flex-end}.vz-gate-card{padding:24px 20px}}"
     ].join("");
     document.head.appendChild(style);
   }
@@ -218,7 +240,8 @@
         '<div class="vz-badge vz-badge-approved' + (animate ? " vz-anim" : "") + '">' +
           '<span class="vz-badge-icon">' + CHECK_SVG + '</span>' +
           '<div class="vz-badge-body"><strong>Conteúdo aprovado ✓</strong><small>' +
-            (item.updatedAt ? "Aprovado em " + formatDate(item.updatedAt) : "Aprovação registrada") +
+            (item.approverName ? 'Aprovado por <span class="vz-badge-who">' + escapeHtml(item.approverName) + '</span>' : "Aprovado") +
+            (item.updatedAt ? " · " + formatDate(item.updatedAt) : "") +
           '</small></div>' +
           '<div class="vz-badge-links"><button type="button" class="vz-link vz-undo">Desfazer</button></div>' +
         '</div>';
@@ -227,7 +250,8 @@
         '<div class="vz-badge vz-badge-changes' + (animate ? " vz-anim" : "") + '">' +
           '<span class="vz-badge-icon">✎</span>' +
           '<div class="vz-badge-body"><strong>Ajuste solicitado</strong><small>' +
-            (item.updatedAt ? "Enviado em " + formatDate(item.updatedAt) : "Pedido registrado") +
+            (item.approverName ? 'Pedido por <span class="vz-badge-who">' + escapeHtml(item.approverName) + '</span>' : "Ajuste solicitado") +
+            (item.updatedAt ? " · " + formatDate(item.updatedAt) : "") +
           '</small>' +
           (item.comment ? '<p class="vz-badge-comment">' + escapeHtml(item.comment) + '</p>' : "") +
           '</div>' +
@@ -313,6 +337,7 @@
   }
 
   function save(box, nextStatus, comment) {
+    if (!approverName) { ensureApprover(); return; }
     var id = box.dataset.id;
     if (busy[id]) return;
     setBusy(box, true);
@@ -321,7 +346,8 @@
       itemId: id,
       itemTitle: box.dataset.title || id,
       status: nextStatus,
-      comment: comment
+      comment: comment,
+      approverName: approverName || undefined
     };
     var request = saveQueue.catch(function () {}).then(function () { return api(payload); });
     saveQueue = request.catch(function () {});
@@ -407,6 +433,44 @@
     if (send) send.disabled = !textarea.value.trim();
   }
 
+  function showGate(onDone) {
+    if (document.querySelector(".vz-gate")) return;
+    var overlay = document.createElement("div");
+    overlay.className = "vz-gate";
+    overlay.innerHTML =
+      '<div class="vz-gate-card" role="dialog" aria-modal="true" aria-label="Identifique-se para avaliar">' +
+        '<span class="vz-gate-eyebrow">Aprovação do plano</span>' +
+        '<h3>Antes de começar, quem é você?</h3>' +
+        '<p>Cada aprovação e pedido de ajuste fica registrado com o seu nome. Assim a equipe sabe exatamente quem avaliou cada conteúdo.</p>' +
+        '<label for="vz-gate-input">Seu nome</label>' +
+        '<input id="vz-gate-input" type="text" placeholder="Ex.: Pedro Borges" maxlength="120" autocomplete="name">' +
+        '<div class="vz-gate-err" aria-live="polite"></div>' +
+        '<button type="button" class="vz-gate-btn">Começar avaliação</button>' +
+      '</div>';
+    document.body.appendChild(overlay);
+    var input = overlay.querySelector("#vz-gate-input");
+    var err = overlay.querySelector(".vz-gate-err");
+    var btn = overlay.querySelector(".vz-gate-btn");
+    window.setTimeout(function () { try { input.focus(); } catch (e) {} }, 60);
+    function submit() {
+      var name = (input.value || "").trim().replace(/\s+/g, " ");
+      if (name.length < 2) { err.textContent = "Digite seu nome para continuar."; try { input.focus(); } catch (e) {} return; }
+      approverName = name;
+      saveApprover(name);
+      if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+      if (onDone) onDone();
+    }
+    btn.addEventListener("click", submit);
+    input.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); submit(); } });
+  }
+
+  function ensureApprover(onReady) {
+    if (approverName) { if (onReady) onReady(); return; }
+    var saved = loadApprover();
+    if (saved) { approverName = saved; if (onReady) onReady(); return; }
+    showGate(onReady);
+  }
+
   addStyles();
   boxes.forEach(function (box) {
     enhanceBox(box);
@@ -414,6 +478,9 @@
   });
   document.addEventListener("click", handleClick, true);
   document.addEventListener("input", handleInput, true);
+
+  approverName = loadApprover();
+  ensureApprover();
 
   api({
     action: "sync",

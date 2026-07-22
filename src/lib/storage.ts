@@ -398,7 +398,9 @@ export async function recordApproval(input: {
   itemTitle: string;
   status: ApprovalStatus;
   comment: string;
+  approverName?: string;
 }) {
+  const approverName = input.approverName?.trim() || undefined;
   const applyChange = (approvals: PlanApprovals) => {
     const now = new Date().toISOString();
     const index = approvals.items.findIndex((item) => item.id === input.itemId);
@@ -417,6 +419,7 @@ export async function recordApproval(input: {
       status: input.status,
       comment,
       updatedAt: now,
+      approverName: input.status === "pending" ? undefined : approverName,
     };
     const items = [...approvals.items];
     if (index >= 0) items[index] = nextItem;
@@ -439,6 +442,7 @@ export async function recordApproval(input: {
       previousStatus: current.status,
       comment,
       createdAt: now,
+      approverName,
     };
     const history = [...approvals.history, event];
 

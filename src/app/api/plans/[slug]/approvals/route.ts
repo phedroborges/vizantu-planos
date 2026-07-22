@@ -18,6 +18,7 @@ const payloadSchema = z.discriminatedUnion("action", [
     itemTitle,
     status: z.enum(["pending", "approved", "changes_requested"]),
     comment: z.string().max(2000).default(""),
+    approverName: z.string().trim().max(120).optional(),
   }),
 ]);
 
@@ -59,6 +60,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
           itemTitle: parsed.data.itemTitle,
           status: parsed.data.status,
           comment: parsed.data.comment,
+          approverName: parsed.data.approverName,
         });
 
     return json({ approvals, summary: summarizeApprovals(approvals) });

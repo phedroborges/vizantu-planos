@@ -25,6 +25,7 @@ export type ApprovalItem = {
   status: ApprovalStatus;
   comment: string;
   updatedAt?: string;
+  approverName?: string;
 };
 
 export type ApprovalEvent = {
@@ -36,6 +37,7 @@ export type ApprovalEvent = {
   previousStatus: ApprovalStatus;
   comment: string;
   createdAt: string;
+  approverName?: string;
 };
 
 export type PlanApprovals = {

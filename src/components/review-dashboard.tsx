@@ -139,7 +139,7 @@ export function ReviewDashboard({ plan, initialApprovals }: { plan: Plan; initia
                     <span className={`review-status ${item.status}`}>{statusLabel(item.status)}</span>
                   </div>
                   {item.comment ? <p>{item.comment}</p> : <p className="no-comment">Nenhum comentário neste conteúdo.</p>}
-                  <small>{formatDate(item.updatedAt)}</small>
+                  <small>{item.approverName ? <><strong>{item.approverName}</strong> · </> : null}{formatDate(item.updatedAt)}</small>
                 </article>
               ))}
             </div>
@@ -166,7 +166,7 @@ export function ReviewDashboard({ plan, initialApprovals }: { plan: Plan; initia
                     <strong>{actionLabel(event.action)}</strong>
                     <p>{event.itemTitle}</p>
                     {event.comment ? <blockquote>{event.comment}</blockquote> : null}
-                    <small>{formatDate(event.createdAt)}</small>
+                    <small>{event.approverName ? <><strong>{event.approverName}</strong> · </> : null}{formatDate(event.createdAt)}</small>
                   </div>
                 </li>
               ))}
