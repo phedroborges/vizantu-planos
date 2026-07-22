@@ -41,7 +41,7 @@
     destination.appendChild(box);
   }
 
-  Array.prototype.forEach.call(document.querySelectorAll("section.band, section.slide, article.script[id]"), createGeneratedApproval);
+  Array.prototype.forEach.call(document.querySelectorAll("section.slide, article.script[id]"), createGeneratedApproval);
   var boxes = Array.prototype.slice.call(document.querySelectorAll(".approval[data-id]"));
   if (!boxes.length) return;
 
