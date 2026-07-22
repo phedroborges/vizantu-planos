@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { PlanEditor } from "@/components/plan-editor";
-import { getPlan, getPlanApprovals } from "@/lib/storage";
+import { applyPlanDeadline, getPlan, getPlanApprovals } from "@/lib/storage";
 import { isAllowedSlug } from "@/lib/slug";
 
 export const dynamic = "force-dynamic";
@@ -11,5 +11,5 @@ export default async function EditPlanPage({ params }: { params: Promise<{ slug:
   const [result, approvals] = await Promise.all([getPlan(slug), getPlanApprovals(slug)]);
   if (!result) notFound();
 
-  return <PlanEditor slug={slug} title={result.plan.title} html={result.html} initialApprovals={approvals} />;
+  return <PlanEditor slug={slug} title={result.plan.title} html={result.html} initialApprovals={applyPlanDeadline(result.plan, approvals)} />;
 }

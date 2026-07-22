@@ -2,6 +2,7 @@
 
 import {
   Check,
+  CalendarClock,
   ClipboardCheck,
   Copy,
   ExternalLink,
@@ -40,7 +41,20 @@ function formatDate(value: string) {
   }).format(new Date(value));
 }
 
+function formatDeadline(value?: string) {
+  if (!value) return "Sem prazo definido";
+  return `Prazo: ${new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "America/Sao_Paulo",
+  }).format(new Date(value))}`;
+}
+
 function approvalPresentation(summary: ApprovalSummary) {
+  if (summary.autoApproved) return { label: "Plano aprovado", tone: "approved", detail: "Aprovação automática" };
   if (summary.status === "approved") return { label: "Plano aprovado", tone: "approved", detail: `${summary.approved}/${summary.total} aprovados` };
   if (summary.status === "changes_requested") return { label: "Plano com ajustes", tone: "adjustments", detail: `${summary.changesRequested} ${summary.changesRequested === 1 ? "ajuste" : "ajustes"}` };
   if (summary.status === "in_review") return { label: "Em revisão", tone: "review", detail: `${summary.approved}/${summary.total} aprovados` };
@@ -64,6 +78,7 @@ export function Dashboard({
   const [title, setTitle] = useState("");
   const [slug, setSlug] = useState("");
   const [kind, setKind] = useState<PlanKind>("approval");
+  const [approvalDays, setApprovalDays] = useState(7);
   const [slugTouched, setSlugTouched] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [query, setQuery] = useState("");
@@ -115,6 +130,7 @@ export function Dashboard({
     body.set("title", title);
     body.set("slug", slug);
     body.set("kind", kind);
+    if (kind === "approval") body.set("approvalDays", String(approvalDays));
     body.set("file", file);
 
     const response = await fetch("/api/plans", { method: "POST", body });
@@ -123,7 +139,9 @@ export function Dashboard({
     if (!response.ok) return setError(result.error || "Não foi possível publicar o plano.");
 
     setPlans((current) => [result.plan, ...current.filter((plan) => plan.slug !== result.plan.slug)]);
-    setSummaries((current) => ({ ...current, [result.plan.slug]: current[result.plan.slug] || emptySummary }));
+    const summaryResponse = await fetch(`/api/plans/${result.plan.slug}/approvals`, { cache: "no-store" });
+    const summaryResult = summaryResponse.ok ? await summaryResponse.json() : null;
+    setSummaries((current) => ({ ...current, [result.plan.slug]: summaryResult?.summary || current[result.plan.slug] || emptySummary }));
     setTitle("");
     setSlug("");
     setSlugTouched(false);
@@ -131,6 +149,7 @@ export function Dashboard({
     if (fileInput.current) fileInput.current.value = "";
     showToast(kind === "presentation" ? "Apresentação publicada, sem fluxo de aprovação." : "Plano publicado e pronto para aprovação.");
     setKind("approval");
+    setApprovalDays(7);
   }
 
   async function copyLink(slugToCopy: string) {
@@ -149,6 +168,31 @@ export function Dashboard({
     const result = await response.json();
     setPlans((current) => current.map((item) => (item.slug === plan.slug ? result.plan : item)));
     showToast(nextKind === "presentation" ? "Agora é uma apresentação, sem aprovação." : "Agora é um plano com aprovação.");
+  }
+
+  async function extendDeadline(plan: Plan) {
+    const answer = window.prompt("Por quantos dias o plano deve ficar aberto a partir de hoje?", String(plan.approvalPeriodDays || 7));
+    if (answer === null) return;
+    const days = Number(answer);
+    if (!Number.isInteger(days) || days < 1 || days > 3650) {
+      showToast("Informe uma quantidade entre 1 e 3650 dias.");
+      return;
+    }
+    const response = await fetch(`/api/plans/${plan.slug}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ approvalDays: days }),
+    });
+    if (!response.ok) return showToast("Não foi possível atualizar o prazo.");
+    const result = await response.json();
+    const summaryResponse = await fetch(`/api/plans/${plan.slug}/approvals`, { cache: "no-store" });
+    const summaryResult = summaryResponse.ok ? await summaryResponse.json() : null;
+    setPlans((current) => current.map((item) => (item.slug === plan.slug ? result.plan : item)));
+    setSummaries((current) => ({
+      ...current,
+      [plan.slug]: summaryResult?.summary || { ...(current[plan.slug] || emptySummary), autoApproved: false, deadlineAt: result.plan.approvalDeadline },
+    }));
+    showToast("Plano reaberto com o novo prazo.");
   }
 
   async function remove(plan: Plan) {
@@ -196,6 +240,13 @@ export function Dashboard({
                 </div>
                 <span className="slug-preview">{kind === "approval" ? "O cliente aprova ou pede ajuste em cada conteúdo." : "Somente visualização, sem botões de aprovação."}</span>
               </div>
+              {kind === "approval" ? (
+                <div className="field">
+                  <label htmlFor="approval-days">Prazo para aprovação</label>
+                  <input id="approval-days" type="number" min="1" max="3650" step="1" value={approvalDays} onChange={(event) => setApprovalDays(Number(event.target.value))} required disabled={storageDisabled} />
+                  <span className="slug-preview">O prazo termina às 23h59 do último dia. Depois disso, o link fecha e o plano é aprovado automaticamente.</span>
+                </div>
+              ) : null}
               <label className={`dropzone ${isDragging ? "active" : ""}`} onDragOver={(event) => { event.preventDefault(); setIsDragging(true); }} onDragLeave={() => setIsDragging(false)} onDrop={(event) => { event.preventDefault(); setIsDragging(false); if (!storageError) pickFile(event.dataTransfer.files[0]); }}>
                 <input ref={fileInput} type="file" accept=".html,.zip,text/html,application/zip" onChange={(event) => pickFile(event.target.files?.[0])} disabled={storageDisabled} />
                 {file ? <div className="selected-file">{file.name.toLowerCase().endsWith(".zip") ? <FileArchive size={28} /> : <FileCode2 size={28} />}<div><strong>{file.name}</strong><span>{formatBytes(file.size)} · pronto para publicar</span></div></div> : <div><UploadCloud size={29} /><strong>Arraste o HTML ou ZIP</strong><span>Documento ou projeto completo de até 4 MB</span></div>}
@@ -211,7 +262,8 @@ export function Dashboard({
               <ul className="plan-list">
                 {visiblePlans.map((plan) => {
                   const isPresentation = plan.kind === "presentation";
-                  const approval = approvalPresentation(summaries[plan.slug] || emptySummary);
+                  const summary = summaries[plan.slug] || emptySummary;
+                  const approval = approvalPresentation(summary);
                   return (
                     <li className="plan-row" key={plan.slug}>
                       <div className="plan-title"><a href={`/${plan.slug}`} target="_blank" rel="noreferrer">{plan.title}</a><div className="plan-url">/{plan.slug}</div></div>
@@ -219,11 +271,13 @@ export function Dashboard({
                         {isPresentation
                           ? <><span className="status presentation"><Presentation size={11} /> Apresentação</span><br />Sem fluxo de aprovação</>
                           : <><span className={`status ${approval.tone}`}>{approval.label}</span><br />{approval.detail}</>}
+                        {!isPresentation ? <><br />{summary.autoApproved ? "Prazo encerrado · aprovação automática" : formatDeadline(plan.approvalDeadline)}</> : null}
                         <br />{formatDate(plan.updatedAt)} · {formatBytes(plan.size)}
                       </div>
                       <div className="actions">
                         <a className="icon-button" href={`/editar/${plan.slug}`} title="Editar o plano" aria-label={`Editar ${plan.title}`}><Pencil size={15} /></a>
                         {isPresentation ? null : <a className="icon-button approval-action" href={`/revisoes/${plan.slug}`} title="Acompanhar aprovações" aria-label={`Acompanhar aprovações de ${plan.title}`}><ClipboardCheck size={15} /></a>}
+                        {isPresentation ? null : <button className="icon-button" onClick={() => extendDeadline(plan)} title="Reabrir ou prorrogar prazo" aria-label={`Reabrir ou prorrogar ${plan.title}`}><CalendarClock size={15} /></button>}
                         <button className="icon-button" onClick={() => toggleKind(plan)} title={isPresentation ? "Transformar em plano com aprovação" : "Transformar em apresentação (sem aprovação)"} aria-label={`Alterar tipo de ${plan.title}`}>{isPresentation ? <ClipboardCheck size={15} /> : <Presentation size={15} />}</button>
                         <button className="icon-button" onClick={() => copyLink(plan.slug)} title="Copiar link" aria-label={`Copiar link de ${plan.title}`}><Copy size={15} /></button>
                         <a className="icon-button" href={`/${plan.slug}`} target="_blank" rel="noreferrer" title="Abrir plano" aria-label={`Abrir ${plan.title}`}><ExternalLink size={15} /></a>

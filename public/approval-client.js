@@ -43,7 +43,6 @@
 
   Array.prototype.forEach.call(document.querySelectorAll("section.slide, article.script[id]"), createGeneratedApproval);
   var boxes = Array.prototype.slice.call(document.querySelectorAll(".approval[data-id]"));
-  if (!boxes.length) return;
 
   var apiUrl = "/api/plans/" + encodeURIComponent(slug) + "/approvals";
   var state = {};
@@ -58,6 +57,8 @@
   var knownProfiles = [];
   var identityReady = false;
   var identityCallbacks = [];
+  var approvalDeadline = "";
+  var approvalDeadlineLabel = "";
 
   function requestIdentity() {
     if (window.parent !== window) {
@@ -80,6 +81,8 @@
     knownProfiles = Array.isArray(event.data.profiles) ? event.data.profiles : [];
     approverName = active && active.name ? String(active.name) : "";
     reviewerId = active && active.id ? String(active.id) : "";
+    approvalDeadline = event.data.deadlineAt ? String(event.data.deadlineAt) : "";
+    approvalDeadlineLabel = event.data.deadlineLabel ? String(event.data.deadlineLabel) : "";
     identityReady = true;
     updateIdentityBadge();
     flushIdentityCallbacks();
@@ -151,6 +154,8 @@
       ".vz-gate-eyebrow{display:block;font:700 10px Arial,sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#9147ff;margin-bottom:10px}",
       ".vz-gate-card h3{margin:0 0 8px;font:700 21px/1.25 Arial,sans-serif}",
       ".vz-gate-card p{margin:0 0 20px;font:400 13px/1.55 Arial,sans-serif;color:#687068}",
+      ".vz-gate-rule{margin:0 0 20px;padding:12px 13px;border-left:4px solid #9147ff;background:#f4effd;color:#443258;font:600 12px/1.5 Arial,sans-serif}",
+      ".vz-gate-rule strong{display:block;margin-bottom:4px;color:#351b55;font-size:12px}",
       ".vz-gate-card label{display:block;font:700 10px Arial,sans-serif;text-transform:uppercase;letter-spacing:.08em;color:#8a8f95;margin-bottom:7px}",
       ".vz-gate-card input{box-sizing:border-box;width:100%;height:48px;padding:0 15px;border:1px solid #cbd2cc;border-radius:9px;font:500 15px Arial,sans-serif;color:#18201a}",
       ".vz-gate-card input:focus{outline:2px solid rgba(145,71,255,.32);border-color:#9147ff}",
@@ -584,6 +589,7 @@
         '<span class="vz-gate-eyebrow">Aprovação do plano</span>' +
         '<h3>Antes de começar, quem é você?</h3>' +
         '<p>Cada aprovação e pedido de ajuste fica registrado com o seu nome. Assim a equipe sabe exatamente quem avaliou cada conteúdo.</p>' +
+        (approvalDeadline ? '<div class="vz-gate-rule"><strong>Prazo: ' + escapeHtml(approvalDeadlineLabel) + '</strong>Após esse horário, este link será fechado e tudo que estiver no plano será considerado aprovado automaticamente.</div>' : '') +
         '<label for="vz-gate-input">Seu nome</label>' +
         '<input id="vz-gate-input" type="text" placeholder="Ex.: Pedro Borges" maxlength="120" autocomplete="name">' +
         '<div class="vz-gate-err" aria-live="polite"></div>' +
@@ -610,10 +616,10 @@
       label.parentNode.insertBefore(profileList, label);
       label.textContent = "Ou informe outro nome";
     }
-    window.setTimeout(function () { try { input.focus(); } catch (e) {} }, 60);
+    window.setTimeout(function () { try { input.focus(); } catch {} }, 60);
     function submit() {
       var name = (input.value || "").trim().replace(/\s+/g, " ");
-      if (name.length < 2) { err.textContent = "Digite seu nome para continuar."; try { input.focus(); } catch (e) {} return; }
+      if (name.length < 2) { err.textContent = "Digite seu nome para continuar."; try { input.focus(); } catch {} return; }
       btn.disabled = true;
       btn.textContent = "Salvando...";
       window.parent.postMessage({ type: "vizantu:identity:save", slug: slug, name: name }, "*");
@@ -641,18 +647,20 @@
   requestIdentity();
   ensureApprover();
 
-  api({
-    action: "sync",
-    items: boxes.map(function (box) { return { id: box.dataset.id, title: box.dataset.title || box.dataset.id }; })
-  }).then(function (data) {
-    applyApprovals(data.approvals);
-    boxes.forEach(function (box) { setBusy(box, false); renderBox(box, false); });
-    window.setInterval(refreshApprovals, 2_000);
-    window.addEventListener("focus", refreshApprovals);
-    document.addEventListener("visibilitychange", function () {
-      if (!document.hidden) refreshApprovals();
+  if (boxes.length) {
+    api({
+      action: "sync",
+      items: boxes.map(function (box) { return { id: box.dataset.id, title: box.dataset.title || box.dataset.id }; })
+    }).then(function (data) {
+      applyApprovals(data.approvals);
+      boxes.forEach(function (box) { setBusy(box, false); renderBox(box, false); });
+      window.setInterval(refreshApprovals, 2_000);
+      window.addEventListener("focus", refreshApprovals);
+      document.addEventListener("visibilitychange", function () {
+        if (!document.hidden) refreshApprovals();
+      });
+    }).catch(function (error) {
+      boxes.forEach(function (box) { setBusy(box, false); showError(box, error.message); });
     });
-  }).catch(function (error) {
-    boxes.forEach(function (box) { setBusy(box, false); showError(box, error.message); });
-  });
+  }
 })();

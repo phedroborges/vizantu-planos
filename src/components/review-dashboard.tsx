@@ -2,7 +2,7 @@
 
 import { Check, Copy, ExternalLink, MessageSquareText, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { ApprovalItem, ApprovalStatus, Plan, PlanApprovals } from "@/lib/types";
+import type { ApprovalStatus, Plan, PlanApprovals } from "@/lib/types";
 
 function formatDate(value?: string) {
   if (!value) return "Sem atualização";
@@ -29,9 +29,11 @@ function actionLabel(action: PlanApprovals["history"][number]["action"]) {
   return "Reabriu a avaliação";
 }
 
-function planStatus(items: ApprovalItem[]) {
+function planStatus(approvals: PlanApprovals) {
+  const items = approvals.items;
   const approved = items.filter((item) => item.status === "approved").length;
   const changes = items.filter((item) => item.status === "changes_requested").length;
+  if (approvals.autoApproved) return { label: "Plano aprovado automaticamente", tone: "approved", approved: items.length, changes: 0 };
   if (!items.length) return { label: "Aguardando acesso", tone: "pending", approved, changes };
   if (changes) return { label: "Plano com ajustes", tone: "adjustments", approved, changes };
   if (approved === items.length) return { label: "Plano aprovado", tone: "approved", approved, changes };
@@ -40,7 +42,7 @@ function planStatus(items: ApprovalItem[]) {
 }
 
 function buildReport(plan: Plan, approvals: PlanApprovals) {
-  const overall = planStatus(approvals.items);
+  const overall = planStatus(approvals);
   const lines = approvals.items.map((item) => {
     const responses = (item.responses || []).filter((response) => response.status !== "pending");
     const details = responses.map((response) => {
@@ -56,7 +58,7 @@ export function ReviewDashboard({ plan, initialApprovals }: { plan: Plan; initia
   const [approvals, setApprovals] = useState(initialApprovals);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [copied, setCopied] = useState(false);
-  const overall = useMemo(() => planStatus(approvals.items), [approvals.items]);
+  const overall = useMemo(() => planStatus(approvals), [approvals]);
   const pending = approvals.items.length - overall.approved - overall.changes;
 
   const refresh = useCallback(async (silent = false) => {
@@ -127,6 +129,18 @@ export function ReviewDashboard({ plan, initialApprovals }: { plan: Plan; initia
         <div className="review-stat adjustments"><strong>{overall.changes}</strong><span>com ajustes</span></div>
         <div className="review-stat"><strong>{pending}</strong><span>aguardando</span></div>
       </section>
+
+      {approvals.autoApproved ? (
+        <div className="deadline-admin-notice">
+          <strong>Prazo encerrado</strong>
+          <span>O link foi fechado e o plano foi aprovado automaticamente em {formatDate(approvals.deadlineAt)}. Os pareceres anteriores continuam preservados no histórico.</span>
+        </div>
+      ) : plan.approvalDeadline ? (
+        <div className="deadline-admin-notice active">
+          <strong>Prazo de aprovação</strong>
+          <span>O cliente pode responder até {formatDate(plan.approvalDeadline)}. Depois desse horário, o plano será aprovado automaticamente.</span>
+        </div>
+      ) : null}
 
       <div className="review-columns">
         <section className="review-section">

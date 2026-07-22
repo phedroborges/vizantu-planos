@@ -16,7 +16,7 @@ export default async function Home() {
 
   try {
     plans = await listPlans();
-    approvalSummaries = await listApprovalSummaries(plans.map((plan) => plan.slug));
+    approvalSummaries = await listApprovalSummaries(plans);
   } catch (error) {
     console.error("Falha ao acessar o armazenamento", error);
     storageError = "O painel está aberto, mas o armazenamento ainda não foi conectado. Na Vercel, abra Storage, crie um Blob Store público e conecte-o a este projeto.";

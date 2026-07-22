@@ -8,6 +8,8 @@ export type Plan = {
   createdAt: string;
   updatedAt: string;
   kind?: PlanKind;
+  approvalDeadline?: string;
+  approvalPeriodDays?: number;
   htmlUrl?: string;
   metadataUrl?: string;
 };
@@ -56,6 +58,8 @@ export type PlanApprovals = {
   history: ApprovalEvent[];
   updatedAt?: string;
   eventIds?: string[];
+  autoApproved?: boolean;
+  deadlineAt?: string;
 };
 
 export type ApprovalSummary = {
@@ -65,4 +69,6 @@ export type ApprovalSummary = {
   pending: number;
   status: "not_started" | "pending" | "in_review" | "approved" | "changes_requested";
   updatedAt?: string;
+  autoApproved?: boolean;
+  deadlineAt?: string;
 };

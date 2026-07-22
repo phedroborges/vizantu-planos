@@ -36,10 +36,10 @@ export function EditorReviewSidebar({
   const [locationMessage, setLocationMessage] = useState("");
   const locationTimerRef = useRef<number | null>(null);
   const adjustments = useMemo(
-    () => approvals.items.flatMap((item) => (item.responses || [])
+    () => approvals.autoApproved ? [] : approvals.items.flatMap((item) => (item.responses || [])
       .filter((response) => response.status === "changes_requested")
       .map((response) => ({ item, response }))),
-    [approvals.items],
+    [approvals],
   );
 
   const refresh = useCallback(async (silent = false) => {

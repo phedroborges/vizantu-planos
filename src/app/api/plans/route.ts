@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { PlanPackageError, preparePlanFile } from "@/lib/plan-package";
+import { approvalDeadlineFromDays } from "@/lib/approval-deadline";
 import { isAllowedSlug, toSlug } from "@/lib/slug";
 import { savePlan } from "@/lib/storage";
 
@@ -12,6 +13,7 @@ const inputSchema = z.object({
   title: z.string().trim().min(3).max(120),
   slug: z.string().trim().min(3).max(80),
   kind: z.enum(["approval", "presentation"]).default("approval"),
+  approvalDays: z.coerce.number().int().min(1).max(3650).default(7),
 });
 
 export async function POST(request: Request) {
@@ -21,6 +23,7 @@ export async function POST(request: Request) {
       title: String(formData.get("title") || ""),
       slug: String(formData.get("slug") || ""),
       kind: String(formData.get("kind") || "approval"),
+      approvalDays: String(formData.get("approvalDays") || "7"),
     });
     if (!parsed.success) return NextResponse.json({ error: "Revise o título e o endereço do plano." }, { status: 400 });
 
@@ -41,6 +44,8 @@ export async function POST(request: Request) {
       html: prepared.html,
       size: prepared.size,
       kind: parsed.data.kind,
+      approvalDeadline: parsed.data.kind === "approval" ? approvalDeadlineFromDays(parsed.data.approvalDays) : undefined,
+      approvalPeriodDays: parsed.data.kind === "approval" ? parsed.data.approvalDays : undefined,
     });
 
     return NextResponse.json({ plan, url: `/${slug}` }, { status: 201 });

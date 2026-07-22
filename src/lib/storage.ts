@@ -9,6 +9,7 @@ import {
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { approvalDeadlineFromDays, isPlanExpired } from "@/lib/approval-deadline";
 import type { ApprovalEvent, ApprovalItem, ApprovalResponse, ApprovalStatus, ApprovalSummary, Plan, PlanApprovals, PlanKind, PlanWithHtml } from "@/lib/types";
 
 const STORE_NAME = "vizantu-planos";
@@ -319,17 +320,38 @@ async function getVercelApprovalSnapshot(slug: string): Promise<ApprovalSnapshot
 
 export function summarizeApprovals(approvals: PlanApprovals): ApprovalSummary {
   const total = approvals.items.length;
-  const approved = approvals.items.filter((item) => item.status === "approved").length;
-  const changesRequested = approvals.items.filter((item) => item.status === "changes_requested").length;
+  const approved = approvals.autoApproved ? total : approvals.items.filter((item) => item.status === "approved").length;
+  const changesRequested = approvals.autoApproved ? 0 : approvals.items.filter((item) => item.status === "changes_requested").length;
   const pending = total - approved - changesRequested;
   let status: ApprovalSummary["status"] = "not_started";
 
+  if (approvals.autoApproved) status = "approved";
   if (total > 0) status = "pending";
   if (approved > 0) status = "in_review";
   if (changesRequested > 0) status = "changes_requested";
   if (total > 0 && approved === total) status = "approved";
 
-  return { total, approved, changesRequested, pending, status, updatedAt: approvals.updatedAt };
+  if (approvals.autoApproved) status = "approved";
+  return {
+    total,
+    approved,
+    changesRequested,
+    pending,
+    status,
+    updatedAt: approvals.updatedAt,
+    autoApproved: approvals.autoApproved,
+    deadlineAt: approvals.deadlineAt,
+  };
+}
+
+export function applyPlanDeadline(plan: Plan, approvals: PlanApprovals, now = new Date()): PlanApprovals {
+  if (!isPlanExpired(plan, now)) return { ...approvals, autoApproved: false, deadlineAt: plan.approvalDeadline };
+  return {
+    ...approvals,
+    items: approvals.items.map((item) => ({ ...item, status: "approved" as ApprovalStatus })),
+    autoApproved: true,
+    deadlineAt: plan.approvalDeadline,
+  };
 }
 
 export async function getPlanApprovals(slug: string): Promise<PlanApprovals> {
@@ -420,9 +442,9 @@ async function writeVercelApprovalEvent(slug: string, event: ApprovalEvent) {
   });
 }
 
-export async function listApprovalSummaries(slugs: string[]) {
+export async function listApprovalSummaries(plans: Plan[]) {
   const entries = await Promise.all(
-    slugs.map(async (slug) => [slug, summarizeApprovals(await getPlanApprovals(slug))] as const),
+    plans.map(async (plan) => [plan.slug, summarizeApprovals(applyPlanDeadline(plan, await getPlanApprovals(plan.slug)))] as const),
   );
   return Object.fromEntries(entries) as Record<string, ApprovalSummary>;
 }
@@ -570,6 +592,8 @@ export async function savePlan(input: {
   html: string;
   size: number;
   kind?: PlanKind;
+  approvalDeadline?: string;
+  approvalPeriodDays?: number;
 }) {
   const existing = await getPlan(input.slug);
   const now = new Date().toISOString();
@@ -581,6 +605,8 @@ export async function savePlan(input: {
     createdAt: existing?.plan.createdAt || now,
     updatedAt: now,
     kind: input.kind || existing?.plan.kind || "approval",
+    approvalDeadline: input.approvalDeadline ?? existing?.plan.approvalDeadline,
+    approvalPeriodDays: input.approvalPeriodDays ?? existing?.plan.approvalPeriodDays,
   };
 
   if (usesVercelBlobs()) {
@@ -658,6 +684,37 @@ export async function setPlanKind(slug: string, kind: PlanKind): Promise<Plan | 
   return plan;
 }
 
+export async function setPlanApprovalPeriod(slug: string, days: number): Promise<Plan | null> {
+  const existing = await getPlan(slug);
+  if (!existing) return null;
+  const plan: Plan = {
+    ...existing.plan,
+    kind: "approval",
+    approvalPeriodDays: days,
+    approvalDeadline: approvalDeadlineFromDays(days),
+    updatedAt: new Date().toISOString(),
+  };
+
+  if (usesVercelBlobs()) {
+    await putVercelBlob(`${VERCEL_ROOT}/${metadataKey(slug)}`, JSON.stringify(plan), {
+      access: "public",
+      addRandomSuffix: false,
+      allowOverwrite: true,
+      contentType: "application/json; charset=utf-8",
+    });
+    return plan;
+  }
+
+  if (!usesNetlifyBlobs()) {
+    await ensureLocalStore();
+    await writeFile(localMetadataPath(slug), JSON.stringify(plan), "utf8");
+    return plan;
+  }
+
+  await netlifyStore().setJSON(metadataKey(slug), plan);
+  return plan;
+}
+
 async function backupLocalHtml(slug: string, html: string) {
   if (usesVercelBlobs() || usesNetlifyBlobs()) return;
   try {
@@ -681,6 +738,8 @@ export async function updatePlanHtml(slug: string, html: string): Promise<Plan |
     html,
     size: Buffer.byteLength(html, "utf8"),
     kind: existing.plan.kind,
+    approvalDeadline: existing.plan.approvalDeadline,
+    approvalPeriodDays: existing.plan.approvalPeriodDays,
   });
 }
 

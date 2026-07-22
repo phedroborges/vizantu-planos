@@ -2,7 +2,7 @@ import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ReviewDashboard } from "@/components/review-dashboard";
-import { getPlanApprovals, listPlans } from "@/lib/storage";
+import { applyPlanDeadline, getPlanApprovals, listPlans } from "@/lib/storage";
 
 export const dynamic = "force-dynamic";
 
@@ -11,7 +11,7 @@ export default async function ReviewPage({ params }: { params: Promise<{ slug: s
   const plans = await listPlans();
   const plan = plans.find((item) => item.slug === slug);
   if (!plan) notFound();
-  const approvals = await getPlanApprovals(slug);
+  const approvals = applyPlanDeadline(plan, await getPlanApprovals(slug));
 
   return (
     <>

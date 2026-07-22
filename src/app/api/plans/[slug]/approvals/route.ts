@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { isAllowedSlug } from "@/lib/slug";
-import { getPlanApprovals, recordApproval, summarizeApprovals, syncApprovalItems } from "@/lib/storage";
+import { isPlanExpired } from "@/lib/approval-deadline";
+import { applyPlanDeadline, getPlan, getPlanApprovals, recordApproval, summarizeApprovals, syncApprovalItems } from "@/lib/storage";
 
 export const runtime = "nodejs";
 
@@ -41,7 +42,9 @@ export function OPTIONS() {
 export async function GET(_: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   if (!isAllowedSlug(slug)) return json({ error: "Endereço inválido." }, { status: 400 });
-  const approvals = await getPlanApprovals(slug);
+  const result = await getPlan(slug);
+  if (!result) return json({ error: "Plano não encontrado." }, { status: 404 });
+  const approvals = applyPlanDeadline(result.plan, await getPlanApprovals(slug));
   return json({ approvals, summary: summarizeApprovals(approvals) });
 }
 
@@ -52,6 +55,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   try {
     const parsed = payloadSchema.safeParse(await request.json());
     if (!parsed.success) return json({ error: "Revise os dados da avaliação." }, { status: 400 });
+    const result = await getPlan(slug);
+    if (!result) return json({ error: "Plano não encontrado." }, { status: 404 });
+    if (isPlanExpired(result.plan)) {
+      const approvals = applyPlanDeadline(result.plan, await getPlanApprovals(slug));
+      return json({
+        error: "O prazo de aprovação terminou e este plano foi aprovado automaticamente.",
+        approvals,
+        summary: summarizeApprovals(approvals),
+      }, { status: 409 });
+    }
 
     const approvals = parsed.data.action === "sync"
       ? await syncApprovalItems(slug, parsed.data.items)

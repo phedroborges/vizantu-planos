@@ -1,4 +1,5 @@
 import { isAllowedSlug } from "@/lib/slug";
+import { isPlanExpired } from "@/lib/approval-deadline";
 import { getPlan } from "@/lib/storage";
 
 export const runtime = "nodejs";
@@ -56,6 +57,16 @@ export async function GET(_: Request, { params }: { params: Promise<{ slug: stri
   if (!isAllowedSlug(slug)) return notFound();
   const result = await getPlan(slug);
   if (!result) return notFound();
+  if (isPlanExpired(result.plan)) {
+    return new Response("O prazo de aprovação terminou e este plano foi aprovado automaticamente.", {
+      status: 410,
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Cache-Control": "no-store, max-age=0",
+        "X-Robots-Tag": "noindex, nofollow, noarchive",
+      },
+    });
+  }
 
   const isPresentation = result.plan.kind === "presentation";
   const base = addDocumentBase(addStorageShim(result.html), slug);

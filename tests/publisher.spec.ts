@@ -1,6 +1,8 @@
 import { expect, test } from "@playwright/test";
 import type { FrameLocator, Page } from "@playwright/test";
 import { strToU8, zipSync } from "fflate";
+import { readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
 
 function planFrame(page: Page) {
   return page.frameLocator("[data-vizantu-plan-frame]");
@@ -131,6 +133,7 @@ test("publica, abre e exclui um HTML", async ({ page, context }, testInfo) => {
   expect(documentResponse.headers()["content-security-policy"]).toContain("sandbox");
   const publicFrame = planFrame(publicPage);
   await expect(publicFrame.getByRole("heading", { name: "Publicação funcionando" })).toBeVisible();
+  await identify(publicFrame, "Cliente Teste");
   await publicFrame.getByRole("button", { name: "Testar" }).click();
   await expect(publicFrame.locator("body")).toHaveAttribute("data-clicked", "sim");
   await publicPage.close();
@@ -322,6 +325,93 @@ test("salva parecer por conteúdo e preserva o histórico", async ({ page }, tes
     await expect(page.getByText("Plano aprovado", { exact: true })).toBeVisible();
     await expect(page.getByText("Aprovou o conteúdo", { exact: true })).toBeVisible();
     await expect(page.getByText("Solicitou ajuste", { exact: true })).toBeVisible();
+  } finally {
+    await page.request.delete(`/api/plans/${slug}`);
+  }
+});
+
+test("encerra no prazo, aprova automaticamente e permite reabrir", async ({ page }, testInfo) => {
+  const slug = `prazo-${testInfo.project.name}`;
+  const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Plano com prazo</title></head><body><main><h1>Campanha de prazo</h1><div class="approval" data-id="campanha-1" data-title="Campanha principal"></div></main></body></html>`;
+  const upload = await page.request.post("/api/plans", {
+    multipart: {
+      title: "Plano com prazo",
+      slug,
+      kind: "approval",
+      approvalDays: "7",
+      file: { name: "prazo.html", mimeType: "text/html", buffer: Buffer.from(html) },
+    },
+  });
+  expect(upload.status()).toBe(201);
+  const uploaded = await upload.json();
+  expect(uploaded.plan.approvalPeriodDays).toBe(7);
+  expect(Date.parse(uploaded.plan.approvalDeadline)).toBeGreaterThan(Date.now());
+
+  try {
+    await page.goto(`/${slug}`);
+    await expect(page.getByText("Prazo para aprovação", { exact: true })).toBeVisible();
+    await expect(page.locator("#vz-deadline-countdown")).toContainText(/\d/);
+    const frame = planFrame(page);
+    await expect(frame.getByText(/Após esse horário.*aprovado automaticamente/)).toBeVisible();
+    await identify(frame, "Cliente do Prazo");
+
+    const review = await page.request.post(`/api/plans/${slug}/approvals`, {
+      data: {
+        action: "record",
+        itemId: "campanha-1",
+        itemTitle: "Campanha principal",
+        status: "changes_requested",
+        comment: "Ajustar a chamada.",
+        approverName: "Cliente do Prazo",
+        reviewerId: "cliente-prazo",
+      },
+    });
+    expect(review.status()).toBe(200);
+
+    const metadataPath = path.join(process.cwd(), ".data", "metadata", `${slug}.json`);
+    const metadata = JSON.parse(await readFile(metadataPath, "utf8"));
+    metadata.approvalDeadline = new Date(Date.now() - 60_000).toISOString();
+    await writeFile(metadataPath, JSON.stringify(metadata), "utf8");
+
+    const expired = await page.request.get(`/api/plans/${slug}/approvals`);
+    expect(expired.status()).toBe(200);
+    const expiredData = await expired.json();
+    expect(expiredData.summary).toMatchObject({ status: "approved", autoApproved: true });
+    expect(expiredData.approvals.items[0].status).toBe("approved");
+
+    const lateReview = await page.request.post(`/api/plans/${slug}/approvals`, {
+      data: {
+        action: "record",
+        itemId: "campanha-1",
+        itemTitle: "Campanha principal",
+        status: "approved",
+        comment: "",
+        approverName: "Cliente atrasado",
+        reviewerId: "cliente-atrasado",
+      },
+    });
+    expect(lateReview.status()).toBe(409);
+
+    await page.goto(`/${slug}`);
+    await expect(page.getByRole("heading", { name: "Prazo de aprovação encerrado." })).toBeVisible();
+    await expect(page.locator("[data-vizantu-plan-frame]")).toHaveCount(0);
+    expect((await page.request.get(`/api/plans/${slug}/document`)).status()).toBe(410);
+    await page.goto(`/revisoes/${slug}`);
+    await expect(page.getByText("Plano aprovado automaticamente", { exact: true })).toBeVisible();
+    await expect(page.getByText(/Os pareceres anteriores continuam preservados/)).toBeVisible();
+
+    const reopened = await page.request.patch(`/api/plans/${slug}`, { data: { approvalDays: 3 } });
+    expect(reopened.status()).toBe(200);
+    const reopenedPlan = await reopened.json();
+    expect(reopenedPlan.plan.approvalPeriodDays).toBe(3);
+    expect(Date.parse(reopenedPlan.plan.approvalDeadline)).toBeGreaterThan(Date.now());
+
+    const activeAgain = await page.request.get(`/api/plans/${slug}/approvals`);
+    const activeData = await activeAgain.json();
+    expect(activeData.approvals.autoApproved).toBe(false);
+    expect(activeData.approvals.items[0].status).toBe("changes_requested");
+    await page.goto(`/${slug}`);
+    await expect(page.locator("[data-vizantu-plan-frame]")).toBeVisible();
   } finally {
     await page.request.delete(`/api/plans/${slug}`);
   }
