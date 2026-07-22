@@ -208,3 +208,30 @@ h1 { margin-bottom: 10px; font-size: clamp(34px, 5vw, 56px); line-height: 1.02; 
   .section-title { padding: 18px; }
   .approval-item { padding: 19px 18px; }
 }
+
+/* ---------- Editor de plano ---------- */
+.editor-wrap { display: flex; flex-direction: column; height: 100vh; background: var(--background); }
+.editor-bar { display: flex; align-items: center; gap: 18px; padding: 0 20px; min-height: 60px; background: var(--dark); color: #fff; border-bottom: 3px solid var(--accent); }
+.editor-back { display: inline-flex; align-items: center; gap: 6px; color: #cdc7dd; text-decoration: none; font-size: 13px; font-weight: 600; white-space: nowrap; }
+.editor-back:hover { color: #fff; }
+.editor-title { display: flex; flex-direction: column; line-height: 1.2; min-width: 0; }
+.editor-title strong { font-size: 10px; text-transform: uppercase; letter-spacing: .1em; color: var(--accent); }
+.editor-title span { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40vw; }
+.editor-actions { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+.editor-msg { font-size: 12px; font-weight: 600; }
+.editor-msg.dirty { color: #f4c752; }
+.editor-msg.saved { color: #7fe0a0; }
+.editor-msg.error { color: #ff8a80; }
+.editor-ghost { display: inline-flex; align-items: center; gap: 6px; color: #cdc7dd; text-decoration: none; font-size: 13px; font-weight: 600; padding: 8px 12px; border: 1px solid rgba(255,255,255,.24); border-radius: 8px; white-space: nowrap; }
+.editor-ghost:hover { color: #fff; border-color: rgba(255,255,255,.5); }
+.editor-save { display: inline-flex; align-items: center; gap: 7px; min-height: 40px; padding: 0 18px; border: 0; border-radius: 8px; background: var(--accent); color: #fff; font-size: 13px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+.editor-save:hover:not(:disabled) { background: var(--accent-strong); }
+.editor-save:disabled { opacity: .5; cursor: default; }
+.editor-hint { padding: 10px 20px; background: #f2ecfe; color: #4e2ea8; font-size: 12px; line-height: 1.5; border-bottom: 1px solid var(--line); }
+.editor-frame { flex: 1; width: 100%; border: 0; background: #fff; }
+@media (max-width: 680px) {
+  .editor-bar { flex-wrap: wrap; min-height: 0; padding: 10px 14px; gap: 10px; }
+  .editor-title span { max-width: 60vw; }
+  .editor-actions { width: 100%; }
+  .editor-save { margin-left: auto; }
+}

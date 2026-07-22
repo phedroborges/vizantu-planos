@@ -7,6 +7,7 @@ import {
   ExternalLink,
   FileArchive,
   FileCode2,
+  Pencil,
   Presentation,
   Search,
   Trash2,
@@ -221,6 +222,7 @@ export function Dashboard({
                         <br />{formatDate(plan.updatedAt)} · {formatBytes(plan.size)}
                       </div>
                       <div className="actions">
+                        <a className="icon-button" href={`/editar/${plan.slug}`} title="Editar o plano" aria-label={`Editar ${plan.title}`}><Pencil size={15} /></a>
                         {isPresentation ? null : <a className="icon-button approval-action" href={`/revisoes/${plan.slug}`} title="Acompanhar aprovações" aria-label={`Acompanhar aprovações de ${plan.title}`}><ClipboardCheck size={15} /></a>}
                         <button className="icon-button" onClick={() => toggleKind(plan)} title={isPresentation ? "Transformar em plano com aprovação" : "Transformar em apresentação (sem aprovação)"} aria-label={`Alterar tipo de ${plan.title}`}>{isPresentation ? <ClipboardCheck size={15} /> : <Presentation size={15} />}</button>
                         <button className="icon-button" onClick={() => copyLink(plan.slug)} title="Copiar link" aria-label={`Copiar link de ${plan.title}`}><Copy size={15} /></button>

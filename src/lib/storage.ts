@@ -21,6 +21,7 @@ const LOCAL_ROOT = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : p
 const LOCAL_METADATA = path.join(LOCAL_ROOT, "metadata");
 const LOCAL_HTML = path.join(LOCAL_ROOT, "plans");
 const LOCAL_APPROVALS = path.join(LOCAL_ROOT, "approvals");
+const LOCAL_BACKUPS = path.join(LOCAL_ROOT, "backups");
 
 function usesVercelBlobs() {
   if (process.env.STORAGE_DRIVER === "local") return false;
@@ -595,6 +596,32 @@ export async function setPlanKind(slug: string, kind: PlanKind): Promise<Plan | 
   const plan = { ...JSON.parse(raw) as Plan, kind, updatedAt: new Date().toISOString() };
   await store.setJSON(metadataKey(slug), plan);
   return plan;
+}
+
+async function backupLocalHtml(slug: string, html: string) {
+  if (usesVercelBlobs() || usesNetlifyBlobs()) return;
+  try {
+    const dir = path.join(LOCAL_BACKUPS, slug);
+    await mkdir(dir, { recursive: true });
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    await writeFile(path.join(dir, `${stamp}.html`), html, "utf8");
+  } catch {
+    // backup é best-effort; não impede a edição
+  }
+}
+
+export async function updatePlanHtml(slug: string, html: string): Promise<Plan | null> {
+  const existing = await getPlan(slug);
+  if (!existing) return null;
+  await backupLocalHtml(slug, existing.html);
+  return savePlan({
+    title: existing.plan.title,
+    slug,
+    originalName: existing.plan.originalName,
+    html,
+    size: Buffer.byteLength(html, "utf8"),
+    kind: existing.plan.kind,
+  });
 }
 
 export async function deletePlan(slug: string) {
