@@ -300,3 +300,62 @@ test("salva parecer por conteúdo e preserva o histórico", async ({ page }, tes
     await page.request.delete(`/api/plans/${slug}`);
   }
 });
+
+test("mostra ajustes e histórico ao lado do editor", async ({ page }, testInfo) => {
+  const slug = `editor-historico-${testInfo.project.name}`;
+  const html = `<!doctype html>
+    <html lang="pt-BR">
+      <head><meta charset="utf-8"><title>Editor com histórico</title></head>
+      <body>
+        <main>
+          <article id="video-1">
+            <h2>Vídeo de lançamento</h2>
+            <p>Texto original do roteiro.</p>
+            <div class="approval" data-id="video-1" data-title="Vídeo de lançamento"></div>
+          </article>
+        </main>
+      </body>
+    </html>`;
+
+  const upload = await page.request.post("/api/plans", {
+    multipart: {
+      title: "Editor com histórico",
+      slug,
+      file: { name: "editor-historico.html", mimeType: "text/html", buffer: Buffer.from(html) },
+    },
+  });
+  expect(upload.status()).toBe(201);
+
+  try {
+    const review = await page.request.post(`/api/plans/${slug}/approvals`, {
+      data: {
+        action: "record",
+        itemId: "video-1",
+        itemTitle: "Vídeo de lançamento",
+        status: "changes_requested",
+        comment: "Trocar a abertura por uma pergunta mais forte.",
+        approverName: "Cliente Teste",
+      },
+    });
+    expect(review.ok()).toBeTruthy();
+
+    await page.goto(`/editar/${slug}`);
+    await expect(page.getByRole("heading", { name: "Ajustes e histórico" })).toBeVisible();
+    await expect(page.getByText("1 ajuste pendente", { exact: true })).toBeVisible();
+    await expect(page.getByText("Trocar a abertura por uma pergunta mais forte.", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText("Solicitou ajuste", { exact: true })).toBeVisible();
+
+    await page.locator(".editor-adjustment").click();
+    const frame = page.frameLocator(".editor-frame");
+    await expect(frame.locator("#video-1")).toHaveAttribute("data-vz-editor-target", "true");
+
+    await frame.getByText("Texto original do roteiro.", { exact: true }).fill("Texto atualizado a partir do parecer.");
+    await page.getByRole("button", { name: "Salvar alterações" }).click();
+    await expect(page.getByRole("button", { name: "Salvo" })).toBeVisible();
+
+    await page.goto(`/${slug}`);
+    await expect(page.getByText("Texto atualizado a partir do parecer.", { exact: true })).toBeVisible();
+  } finally {
+    await page.request.delete(`/api/plans/${slug}`);
+  }
+});

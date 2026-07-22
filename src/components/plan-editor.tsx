@@ -1,7 +1,10 @@
 "use client";
 
-import { ArrowLeft, Check, ExternalLink, Save } from "lucide-react";
+import { ArrowLeft, Check, ExternalLink, History, Save } from "lucide-react";
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { EditorReviewSidebar } from "@/components/editor-review-sidebar";
+import type { ApprovalItem, PlanApprovals } from "@/lib/types";
 
 const EDITABLE = [
   "p", "h1", "h2", "h3", "h4", "h5", "li", "td", "th", "blockquote", "figcaption", "caption",
@@ -12,13 +15,17 @@ const EDITOR_STYLE = `
   [data-vz-editable]{outline:1px dashed rgba(145,71,255,.35);outline-offset:2px;border-radius:3px;transition:outline-color .12s,background .12s;cursor:text;}
   [data-vz-editable]:hover{outline-color:rgba(145,71,255,.7);background:rgba(145,71,255,.05);}
   [data-vz-editable]:focus{outline:2px solid #9147ff;background:rgba(145,71,255,.08);}
+  [data-vz-editor-target]{outline:4px solid #e56a3c!important;outline-offset:6px!important;animation:vzEditorTarget 1.8s ease;}
+  @keyframes vzEditorTarget{0%,100%{box-shadow:0 0 0 0 rgba(229,106,60,0)}35%{box-shadow:0 0 0 12px rgba(229,106,60,.2)}}
 `;
 
-export function PlanEditor({ slug, title, html }: { slug: string; title: string; html: string }) {
+export function PlanEditor({ slug, title, html, initialApprovals }: { slug: string; title: string; html: string; initialApprovals: PlanApprovals }) {
   const frameRef = useRef<HTMLIFrameElement>(null);
+  const highlightTimerRef = useRef<number | null>(null);
   const [dirty, setDirty] = useState(false);
   const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [message, setMessage] = useState("");
+  const [historyOpen, setHistoryOpen] = useState(true);
 
   const setupEditor = useCallback(() => {
     const doc = frameRef.current?.contentDocument;
@@ -105,17 +112,49 @@ export function PlanEditor({ slug, title, html }: { slug: string; title: string;
     return () => window.removeEventListener("beforeunload", beforeUnload);
   }, [dirty]);
 
+  useEffect(() => () => {
+    if (highlightTimerRef.current !== null) window.clearTimeout(highlightTimerRef.current);
+  }, []);
+
+  const focusReviewItem = useCallback((item: Pick<ApprovalItem, "id" | "title">) => {
+    const doc = frameRef.current?.contentDocument;
+    if (!doc) return false;
+    const escapedId = window.CSS?.escape ? window.CSS.escape(item.id) : item.id.replace(/[^a-zA-Z0-9_-]/g, "");
+    const sourceId = item.id.replace(/^(secao|conteudo)-/, "");
+    let target = doc.querySelector<HTMLElement>(`.approval[data-id="${escapedId}"]`);
+    target = target?.closest<HTMLElement>("article, section") || target;
+    if (!target && sourceId) target = doc.getElementById(sourceId);
+    if (!target) {
+      const normalizedTitle = item.title.toLocaleLowerCase("pt-BR").replace(/\s+/g, " ").trim();
+      target = [...doc.querySelectorAll<HTMLElement>("article, section")].find((element) => {
+        const text = (element.textContent || "").toLocaleLowerCase("pt-BR").replace(/\s+/g, " ");
+        return normalizedTitle.length > 5 && text.includes(normalizedTitle);
+      }) || null;
+    }
+    if (!target) return false;
+
+    doc.querySelectorAll("[data-vz-editor-target]").forEach((element) => element.removeAttribute("data-vz-editor-target"));
+    target.setAttribute("data-vz-editor-target", "true");
+    target.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (highlightTimerRef.current !== null) window.clearTimeout(highlightTimerRef.current);
+    highlightTimerRef.current = window.setTimeout(() => target?.removeAttribute("data-vz-editor-target"), 2600);
+    return true;
+  }, []);
+
   return (
     <div className="editor-wrap">
       <div className="editor-bar">
-        <a className="editor-back" href="/"><ArrowLeft size={15} /> Painel</a>
+        <Link className="editor-back" href="/"><ArrowLeft size={15} /> Painel</Link>
         <div className="editor-title">
           <strong>Editando</strong>
           <span>{title}</span>
         </div>
         <div className="editor-actions">
           {message ? <span className={`editor-msg ${status}`}>{message}</span> : dirty ? <span className="editor-msg dirty">Alterações não salvas</span> : null}
-          <a className="editor-ghost" href={`/${slug}`} target="_blank" rel="noreferrer"><ExternalLink size={14} /> Ver plano</a>
+          <button className={`editor-history-toggle ${historyOpen ? "active" : ""}`} type="button" onClick={() => setHistoryOpen((open) => !open)} aria-expanded={historyOpen} aria-controls="editor-review-panel">
+            <History size={14} /> {historyOpen ? "Ocultar histórico" : "Ver histórico"}
+          </button>
+          <Link className="editor-ghost" href={`/${slug}`} target="_blank" rel="noreferrer"><ExternalLink size={14} /> Ver plano</Link>
           <button className="editor-save" type="button" onClick={save} disabled={status === "saving" || !dirty}>
             {status === "saving" ? "Salvando…" : status === "saved" ? <><Check size={15} /> Salvo</> : <><Save size={15} /> Salvar alterações</>}
           </button>
@@ -124,13 +163,20 @@ export function PlanEditor({ slug, title, html }: { slug: string; title: string;
       <div className="editor-hint">
         Clique em qualquer texto do plano para editar. As áreas editáveis ficam destacadas em roxo ao passar o mouse. Salve ao terminar — guardamos um backup automático da versão anterior.
       </div>
-      <iframe
-        ref={frameRef}
-        className="editor-frame"
-        title={`Editando ${title}`}
-        srcDoc={html}
-        sandbox="allow-same-origin"
-      />
+      <div className="editor-workspace">
+        <iframe
+          ref={frameRef}
+          className="editor-frame"
+          title={`Editando ${title}`}
+          srcDoc={html}
+          sandbox="allow-same-origin"
+        />
+        {historyOpen ? (
+          <div id="editor-review-panel" className="editor-review-panel">
+            <EditorReviewSidebar slug={slug} initialApprovals={initialApprovals} onSelectItem={focusReviewItem} />
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }
