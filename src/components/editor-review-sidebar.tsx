@@ -36,7 +36,9 @@ export function EditorReviewSidebar({
   const [locationMessage, setLocationMessage] = useState("");
   const locationTimerRef = useRef<number | null>(null);
   const adjustments = useMemo(
-    () => approvals.items.filter((item) => item.status === "changes_requested"),
+    () => approvals.items.flatMap((item) => (item.responses || [])
+      .filter((response) => response.status === "changes_requested")
+      .map((response) => ({ item, response }))),
     [approvals.items],
   );
 
@@ -100,11 +102,11 @@ export function EditorReviewSidebar({
         </div>
         {adjustments.length ? (
           <div className="editor-adjustment-list">
-            {adjustments.map((item) => (
-              <button className="editor-adjustment" type="button" key={item.id} onClick={() => selectItem(item)}>
+            {adjustments.map(({ item, response }) => (
+              <button className="editor-adjustment" type="button" key={`${item.id}:${response.reviewerId}`} onClick={() => selectItem(item)}>
                 <span className="editor-adjustment-title">{item.title}<ChevronRight size={14} /></span>
-                {item.comment ? <span className="editor-adjustment-comment">{item.comment}</span> : <span className="editor-adjustment-comment empty">Ajuste solicitado sem comentário.</span>}
-                <small>{item.approverName ? <><strong>{item.approverName}</strong> · </> : null}{formatDate(item.updatedAt)}</small>
+                {response.comment ? <span className="editor-adjustment-comment">{response.comment}</span> : <span className="editor-adjustment-comment empty">Ajuste solicitado sem comentário.</span>}
+                <small><strong>{response.approverName}</strong> · {formatDate(response.updatedAt)}</small>
               </button>
             ))}
           </div>

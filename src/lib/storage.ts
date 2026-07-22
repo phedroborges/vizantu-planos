@@ -6,10 +6,10 @@ import {
   list as listVercelBlobs,
   put as putVercelBlob,
 } from "@vercel/blob";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { ApprovalEvent, ApprovalItem, ApprovalStatus, ApprovalSummary, Plan, PlanApprovals, PlanKind, PlanWithHtml } from "@/lib/types";
+import type { ApprovalEvent, ApprovalItem, ApprovalResponse, ApprovalStatus, ApprovalSummary, Plan, PlanApprovals, PlanKind, PlanWithHtml } from "@/lib/types";
 
 const STORE_NAME = "vizantu-planos";
 const VERCEL_ROOT = "vizantu-planos";
@@ -139,6 +139,48 @@ function emptyApprovals(slug: string): PlanApprovals {
   return { planSlug: slug, items: [], history: [] };
 }
 
+function legacyReviewerId(name?: string) {
+  const normalized = name?.trim().toLocaleLowerCase("pt-BR") || "visitante";
+  return `legacy-${createHash("sha256").update(normalized).digest("hex").slice(0, 16)}`;
+}
+
+function aggregateApprovalItem(item: ApprovalItem, responses: ApprovalResponse[]) {
+  const active = responses.filter((response) => response.status !== "pending");
+  const approved = active.filter((response) => response.status === "approved");
+  const adjustments = active.filter((response) => response.status === "changes_requested");
+  const status: ApprovalStatus = approved.length ? "approved" : adjustments.length ? "changes_requested" : "pending";
+  const representative = [...(status === "approved" ? approved : status === "changes_requested" ? adjustments : responses)]
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
+  const updatedAt = [...responses].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0]?.updatedAt || item.updatedAt;
+
+  return {
+    ...item,
+    status,
+    comment: representative?.comment || "",
+    approverName: representative?.approverName,
+    updatedAt,
+    responses,
+  } satisfies ApprovalItem;
+}
+
+function normalizeApprovalItem(item: ApprovalItem) {
+  let responses = item.responses?.filter((response) => response.reviewerId && response.approverName) || [];
+  if (!responses.length && item.status !== "pending" && item.updatedAt) {
+    responses = [{
+      reviewerId: legacyReviewerId(item.approverName),
+      approverName: item.approverName || "Cliente",
+      status: item.status,
+      comment: item.comment || "",
+      updatedAt: item.updatedAt,
+    }];
+  }
+  return aggregateApprovalItem(item, responses);
+}
+
+function normalizeApprovals(approvals: PlanApprovals) {
+  return { ...approvals, items: approvals.items.map(normalizeApprovalItem) };
+}
+
 async function readVercelText(pathname: string) {
   try {
     const result = await getVercelBlob(pathname, { access: "public", useCache: false });
@@ -205,11 +247,12 @@ async function listVercelApprovalEvents(slug: string) {
 }
 
 function mergeApprovalEvents(approvals: PlanApprovals, events: ApprovalEvent[]) {
-  if (!events.length) return approvals;
+  const normalized = normalizeApprovals(approvals);
+  if (!events.length) return normalized;
 
-  const knownHistory = new Set(approvals.history.map((event) => event.id));
-  const history = [...approvals.history];
-  const eventIds = new Set(approvals.eventIds || []);
+  const knownHistory = new Set(normalized.history.map((event) => event.id));
+  const history = [...normalized.history];
+  const eventIds = new Set(normalized.eventIds || []);
 
   for (const event of events) {
     eventIds.add(event.id);
@@ -220,28 +263,34 @@ function mergeApprovalEvents(approvals: PlanApprovals, events: ApprovalEvent[]) 
   }
 
   history.sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
-  const items = approvals.items.map((item) => ({ ...item }));
+  const items: ApprovalItem[] = normalized.items.map((item) => ({ ...item, responses: [...(item.responses || [])] }));
   const itemIndexes = new Map(items.map((item, index) => [item.id, index]));
 
   for (const event of history) {
-    const index = itemIndexes.get(event.itemId);
-    const item: ApprovalItem = {
-      id: event.itemId,
-      title: event.itemTitle,
+    let index = itemIndexes.get(event.itemId);
+    if (index === undefined) {
+      index = items.length;
+      itemIndexes.set(event.itemId, index);
+      items.push({ id: event.itemId, title: event.itemTitle, status: "pending", comment: "", responses: [] });
+    }
+    const current = items[index];
+    const reviewerId = event.reviewerId || legacyReviewerId(event.approverName);
+    const response: ApprovalResponse = {
+      reviewerId,
+      approverName: event.approverName || "Cliente",
       status: event.status,
       comment: event.comment,
       updatedAt: event.createdAt,
     };
-    if (index === undefined) {
-      itemIndexes.set(event.itemId, items.length);
-      items.push(item);
-    } else {
-      items[index] = item;
-    }
+    const responses = [...(current.responses || [])];
+    const responseIndex = responses.findIndex((entry) => entry.reviewerId === reviewerId);
+    if (responseIndex >= 0) responses[responseIndex] = response;
+    else responses.push(response);
+    items[index] = aggregateApprovalItem({ ...current, title: event.itemTitle }, responses);
   }
 
-  const updatedAt = history.at(-1)?.createdAt || approvals.updatedAt;
-  return { ...approvals, items, history, eventIds: [...eventIds], updatedAt };
+  const updatedAt = history.at(-1)?.createdAt || normalized.updatedAt;
+  return { ...normalized, items, history, eventIds: [...eventIds], updatedAt };
 }
 
 async function getVercelApprovalSnapshot(slug: string): Promise<ApprovalSnapshot> {
@@ -294,7 +343,7 @@ export async function getPlanApprovals(slug: string): Promise<PlanApprovals> {
 
   if (!usesNetlifyBlobs()) {
     try {
-      return JSON.parse(await readFile(localApprovalsPath(slug), "utf8")) as PlanApprovals;
+      return normalizeApprovals(JSON.parse(await readFile(localApprovalsPath(slug), "utf8")) as PlanApprovals);
     } catch {
       return emptyApprovals(slug);
     }
@@ -303,7 +352,7 @@ export async function getPlanApprovals(slug: string): Promise<PlanApprovals> {
   const raw = await netlifyStore().get(approvalsKey(slug), { type: "text" });
   if (!raw) return emptyApprovals(slug);
   try {
-    return JSON.parse(raw) as PlanApprovals;
+    return normalizeApprovals(JSON.parse(raw) as PlanApprovals);
   } catch {
     return emptyApprovals(slug);
   }
@@ -380,14 +429,13 @@ export async function listApprovalSummaries(slugs: string[]) {
 
 export async function syncApprovalItems(slug: string, items: Array<Pick<ApprovalItem, "id" | "title">>) {
   return mutatePlanApprovals(slug, (approvals) => {
-    const current = new Map(approvals.items.map((item) => [item.id, item]));
-    const syncedItems = items.map((item) => ({
-      id: item.id,
-      title: item.title,
-      status: current.get(item.id)?.status || "pending" as ApprovalStatus,
-      comment: current.get(item.id)?.comment || "",
-      updatedAt: current.get(item.id)?.updatedAt,
-    }));
+    const current = new Map(normalizeApprovals(approvals).items.map((item) => [item.id, item]));
+    const syncedItems = items.map((item) => {
+      const stored = current.get(item.id);
+      return stored
+        ? aggregateApprovalItem({ ...stored, title: item.title }, stored.responses || [])
+        : { id: item.id, title: item.title, status: "pending" as ApprovalStatus, comment: "", responses: [] };
+    });
     const changed = JSON.stringify(syncedItems) !== JSON.stringify(approvals.items);
     return changed ? { ...approvals, items: syncedItems, updatedAt: new Date().toISOString() } : null;
   });
@@ -400,33 +448,44 @@ export async function recordApproval(input: {
   status: ApprovalStatus;
   comment: string;
   approverName?: string;
+  reviewerId?: string;
 }) {
-  const approverName = input.approverName?.trim() || undefined;
+  const approverName = input.approverName?.trim() || "Cliente";
+  const reviewerId = input.reviewerId?.trim() || legacyReviewerId(approverName);
   const applyChange = (approvals: PlanApprovals) => {
     const now = new Date().toISOString();
-    const index = approvals.items.findIndex((item) => item.id === input.itemId);
+    const normalized = normalizeApprovals(approvals);
+    const index = normalized.items.findIndex((item) => item.id === input.itemId);
     const current = index >= 0
-      ? approvals.items[index]
-      : { id: input.itemId, title: input.itemTitle, status: "pending" as ApprovalStatus, comment: "" };
+      ? normalized.items[index]
+      : { id: input.itemId, title: input.itemTitle, status: "pending" as ApprovalStatus, comment: "", responses: [] };
+    const responses = [...(current.responses || [])];
+    const responseIndex = responses.findIndex((response) => response.reviewerId === reviewerId);
+    const currentResponse = responseIndex >= 0
+      ? responses[responseIndex]
+      : { reviewerId, approverName, status: "pending" as ApprovalStatus, comment: "", updatedAt: "" };
     const comment = input.comment.trim();
 
-    if (current.status === input.status && current.comment === comment && current.title === input.itemTitle) {
+    if (currentResponse.status === input.status && currentResponse.comment === comment && current.title === input.itemTitle) {
       return null;
     }
 
-    const nextItem: ApprovalItem = {
-      id: input.itemId,
-      title: input.itemTitle,
+    const nextResponse: ApprovalResponse = {
+      reviewerId,
+      approverName,
       status: input.status,
       comment,
       updatedAt: now,
-      approverName: input.status === "pending" ? undefined : approverName,
     };
-    const items = [...approvals.items];
+    if (responseIndex >= 0) responses[responseIndex] = nextResponse;
+    else responses.push(nextResponse);
+
+    const nextItem = aggregateApprovalItem({ ...current, title: input.itemTitle }, responses);
+    const items = [...normalized.items];
     if (index >= 0) items[index] = nextItem;
     else items.push(nextItem);
 
-    const action: ApprovalEvent["action"] = current.status !== input.status
+    const action: ApprovalEvent["action"] = currentResponse.status !== input.status
       ? input.status === "approved"
         ? "approved"
         : input.status === "changes_requested"
@@ -440,15 +499,16 @@ export async function recordApproval(input: {
       itemTitle: input.itemTitle,
       action,
       status: input.status,
-      previousStatus: current.status,
+      previousStatus: currentResponse.status,
       comment,
       createdAt: now,
       approverName,
+      reviewerId,
     };
-    const history = [...approvals.history, event];
+    const history = [...normalized.history, event];
 
     return {
-      approvals: { ...approvals, planSlug: input.slug, items, history, updatedAt: now },
+      approvals: { ...normalized, planSlug: input.slug, items, history, updatedAt: now },
       event,
     };
   };

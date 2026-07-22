@@ -54,13 +54,38 @@
   var lastUpdatedAt = 0;
   var refreshInFlight = false;
   var approverName = "";
-  var APPROVER_KEY = "vizantu-approver:" + slug;
+  var reviewerId = "";
+  var knownProfiles = [];
+  var identityReady = false;
+  var identityCallbacks = [];
 
-  function loadApprover() {
-    try { return (window.localStorage.getItem(APPROVER_KEY) || "").trim(); } catch (e) { return ""; }
+  function requestIdentity() {
+    if (window.parent !== window) {
+      window.parent.postMessage({ type: "vizantu:identity:get", slug: slug }, "*");
+      return;
+    }
+    identityReady = true;
+    flushIdentityCallbacks();
   }
-  function saveApprover(name) {
-    try { window.localStorage.setItem(APPROVER_KEY, name); } catch (e) {}
+
+  function flushIdentityCallbacks() {
+    var callbacks = identityCallbacks.slice();
+    identityCallbacks = [];
+    callbacks.forEach(function (callback) { callback(); });
+  }
+
+  function receiveIdentity(event) {
+    if (event.source !== window.parent || !event.data || event.data.type !== "vizantu:identity:state" || event.data.slug !== slug) return;
+    var active = event.data.active;
+    knownProfiles = Array.isArray(event.data.profiles) ? event.data.profiles : [];
+    approverName = active && active.name ? String(active.name) : "";
+    reviewerId = active && active.id ? String(active.id) : "";
+    identityReady = true;
+    updateIdentityBadge();
+    flushIdentityCallbacks();
+    if (!reviewerId) showGate();
+    else document.querySelector(".vz-gate")?.remove();
+    boxes.forEach(function (box) { renderBox(box, false); });
   }
 
   var CHECK_SVG = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path class="vz-check-path" d="M4 12.5 9.5 18 20 6.5"/></svg>';
@@ -133,7 +158,18 @@
       ".vz-gate-btn:hover{background:#5324d6}",
       ".vz-gate-err{margin-top:9px;font:600 12px Arial,sans-serif;color:#b3312a;min-height:15px}",
       ".vz-badge-who{font-weight:700}",
-      "@media(max-width:640px){.vz-generated-approval{padding:16px}.vz-generated-head{display:block}.vz-generated-head strong{display:block;margin-top:6px;text-align:left}.vz-choice{display:grid;grid-template-columns:1fr 1fr}.vz-badge{flex-wrap:wrap}.vz-badge-links{flex-direction:row;width:100%;justify-content:flex-end}.vz-gate-card{padding:24px 20px}}"
+      ".vz-identity{position:fixed;right:16px;bottom:16px;z-index:2147483400;display:flex;align-items:center;gap:8px;padding:8px 10px 8px 12px;border:1px solid rgba(255,255,255,.28);border-radius:999px;background:rgba(16,16,16,.82);box-shadow:0 8px 24px rgba(0,0,0,.22);font:600 11px Arial,sans-serif;color:#fff}",
+      ".vz-identity button{border:0;background:transparent;padding:2px;color:#cbb7ff;cursor:pointer;font:700 10px Arial,sans-serif;text-decoration:underline}",
+      ".vz-profile-list{display:grid;gap:8px;margin:0 0 18px}",
+      ".vz-profile{width:100%;min-height:44px;padding:9px 12px;border:1px solid #d9d1e8;border-radius:8px;background:#f8f5fd;color:#33224d;cursor:pointer;text-align:left;font:650 13px Arial,sans-serif}",
+      ".vz-profile:hover{border-color:#9147ff;background:#f1eafd}",
+      ".vz-other{margin:0 0 16px;border:0;background:transparent;padding:0;color:#6435e7;cursor:pointer;font:700 11px Arial,sans-serif;text-decoration:underline}",
+      ".vz-response-list{display:grid;gap:8px;margin-top:10px}",
+      ".vz-response{padding:9px 11px;border-radius:5px;background:rgba(255,255,255,.72);font:500 11px/1.45 Arial,sans-serif}",
+      ".vz-response strong{display:inline!important;font-size:11px!important}",
+      ".vz-response p{margin:5px 0 0;white-space:pre-wrap}",
+      ".vz-my-review{margin-top:10px;padding:10px 12px;border:1px solid #d8dcd7;border-radius:5px;background:#f7f8f6;font:600 11px/1.45 Arial,sans-serif;color:#4c554d}",
+      "@media(max-width:640px){.vz-generated-approval{padding:16px}.vz-generated-head{display:block}.vz-generated-head strong{display:block;margin-top:6px;text-align:left}.vz-choice{display:grid;grid-template-columns:1fr 1fr}.vz-badge{flex-wrap:wrap}.vz-badge-links{flex-direction:row;width:100%;justify-content:flex-end}.vz-gate-card{padding:24px 20px}.vz-identity{right:10px;bottom:10px}}"
     ].join("");
     document.head.appendChild(style);
   }
@@ -213,9 +249,9 @@
     });
   }
 
-  function renderBox(box, animate) {
+  function renderBoxLegacy(box, animate) {
     var id = box.dataset.id;
-    var item = state[id] || { status: "pending", comment: "" };
+    var item = state[id] || { status: "pending", comment: "", responses: [] };
     var choice = box.querySelector(".vz-choice");
     var edit = box.querySelector(".vz-edit");
     var verdict = box.querySelector(".vz-verdict");
@@ -269,6 +305,86 @@
     }
   }
 
+  void renderBoxLegacy;
+
+  function responseFor(item) {
+    var responses = Array.isArray(item.responses) ? item.responses : [];
+    return responses.find(function (response) { return response.reviewerId === reviewerId; }) || { status: "pending", comment: "" };
+  }
+
+  function responseList(responses) {
+    return '<div class="vz-response-list">' + responses.map(function (response) {
+      return '<div class="vz-response"><strong>' + escapeHtml(response.approverName || "Cliente") + '</strong>' +
+        (response.updatedAt ? ' <small>· ' + formatDate(response.updatedAt) + '</small>' : "") +
+        (response.comment ? '<p>' + escapeHtml(response.comment) + '</p>' : "") + '</div>';
+    }).join("") + '</div>';
+  }
+
+  function renderBox(box, animate) {
+    var id = box.dataset.id;
+    var item = state[id] || { status: "pending", comment: "", responses: [] };
+    var responses = Array.isArray(item.responses) ? item.responses.filter(function (response) { return response.status !== "pending"; }) : [];
+    var own = responseFor(item);
+    var choice = box.querySelector(".vz-choice");
+    var edit = box.querySelector(".vz-edit");
+    var verdict = box.querySelector(".vz-verdict");
+    var label = box.querySelector(".vz-status-line");
+    if (!choice || !edit || !verdict) return;
+
+    var personalMode = editing[id] ? "edit" : own.status === "pending" ? "choice" : "done";
+    choice.hidden = personalMode !== "choice";
+    edit.hidden = personalMode !== "edit";
+    verdict.hidden = item.status === "pending" && personalMode === "choice";
+
+    if (personalMode === "edit") {
+      var textarea = edit.querySelector("textarea");
+      if (textarea && !dirty[id] && document.activeElement !== textarea) textarea.value = own.comment || "";
+      var send = edit.querySelector(".vz-send");
+      if (send && textarea) send.disabled = !textarea.value.trim();
+    }
+
+    var links = own.status === "changes_requested"
+      ? '<div class="vz-badge-links"><button type="button" class="vz-link vz-edit-request">Editar meu pedido</button><button type="button" class="vz-link vz-undo">Desfazer meu parecer</button></div>'
+      : own.status === "approved"
+        ? '<div class="vz-badge-links"><button type="button" class="vz-link vz-undo">Desfazer minha aprovação</button></div>'
+        : "";
+    var myReview = own.status === "changes_requested"
+      ? '<div class="vz-my-review">Seu parecer: ajuste solicitado' + (own.comment ? '<p class="vz-badge-comment">' + escapeHtml(own.comment) + '</p>' : "") + '</div>'
+      : own.status === "approved" ? '<div class="vz-my-review">Seu parecer: aprovado</div>' : "";
+
+    if (item.status === "approved") {
+      var approvedResponses = responses.filter(function (response) { return response.status === "approved"; });
+      var adjustmentResponses = responses.filter(function (response) { return response.status === "changes_requested"; });
+      verdict.innerHTML =
+        '<div class="vz-badge vz-badge-approved' + (animate ? " vz-anim" : "") + '">' +
+          '<span class="vz-badge-icon">' + CHECK_SVG + '</span>' +
+          '<div class="vz-badge-body"><strong>Conteúdo aprovado ✓</strong><small>Aprovado por <span class="vz-badge-who">' +
+            escapeHtml(approvedResponses.map(function (response) { return response.approverName; }).join(", ") || "Cliente") + '</span></small>' +
+            (adjustmentResponses.length ? '<div class="vz-response-list"><div class="vz-response"><strong>Outros pedidos registrados</strong></div></div>' + responseList(adjustmentResponses) : "") +
+            myReview + '</div>' + links +
+        '</div>';
+    } else if (item.status === "changes_requested") {
+      var requested = responses.filter(function (response) { return response.status === "changes_requested"; });
+      verdict.innerHTML =
+        '<div class="vz-badge vz-badge-changes' + (animate ? " vz-anim" : "") + '">' +
+          '<span class="vz-badge-icon">✎</span>' +
+          '<div class="vz-badge-body"><strong>Ajuste solicitado</strong><small>' + requested.length + (requested.length === 1 ? " pessoa pediu alteração" : " pessoas pediram alterações") + '</small>' +
+            responseList(requested) + myReview + '</div>' + links +
+        '</div>';
+    } else if (personalMode === "done") {
+      verdict.innerHTML = myReview + links;
+    } else {
+      verdict.innerHTML = "";
+    }
+
+    if (label && !busy[id]) {
+      label.dataset.state = "saved";
+      if (personalMode === "choice") label.textContent = item.status === "pending" ? "Aprove este conteúdo ou peça um ajuste." : "Você ainda pode registrar o seu próprio parecer.";
+      else if (personalMode === "edit") label.textContent = "O pedido é enviado quando você confirmar.";
+      else label.textContent = own.updatedAt ? "Seu parecer foi salvo em " + formatDate(own.updatedAt) : "";
+    }
+  }
+
   function renderSummary() {
     var items = boxes.map(function (box) { return state[box.dataset.id] || { status: "pending" }; });
     var approved = items.filter(function (item) { return item.status === "approved"; }).length;
@@ -282,10 +398,13 @@
   function buildReport() {
     var lines = [document.title + " — Parecer do cliente", ""];
     boxes.forEach(function (box) {
-      var item = state[box.dataset.id] || { status: "pending", comment: "" };
+      var item = state[box.dataset.id] || { status: "pending", comment: "", responses: [] };
       var label = item.status === "approved" ? "APROVADO" : item.status === "changes_requested" ? "AJUSTE SOLICITADO" : "SEM AVALIAÇÃO";
       lines.push((box.dataset.title || box.dataset.id) + ": " + label);
-      if (item.comment && item.status === "changes_requested") lines.push('Ajuste: "' + item.comment + '"');
+      (item.responses || []).filter(function (response) { return response.status !== "pending"; }).forEach(function (response) {
+        lines.push((response.approverName || "Cliente") + ": " + (response.status === "approved" ? "APROVOU" : "PEDIU AJUSTE"));
+        if (response.comment) lines.push('Comentário: "' + response.comment + '"');
+      });
       lines.push("");
     });
     return lines.join("\n");
@@ -337,7 +456,7 @@
   }
 
   function save(box, nextStatus, comment) {
-    if (!approverName) { ensureApprover(); return; }
+    if (!approverName || !reviewerId) { ensureApprover(function () { save(box, nextStatus, comment); }); return; }
     var id = box.dataset.id;
     if (busy[id]) return;
     setBusy(box, true);
@@ -347,7 +466,8 @@
       itemTitle: box.dataset.title || id,
       status: nextStatus,
       comment: comment,
-      approverName: approverName || undefined
+      approverName: approverName || undefined,
+      reviewerId: reviewerId || undefined
     };
     var request = saveQueue.catch(function () {}).then(function () { return api(payload); });
     saveQueue = request.catch(function () {});
@@ -385,7 +505,8 @@
     event.preventDefault();
     event.stopImmediatePropagation();
     var id = box.dataset.id;
-    var item = state[id] || { status: "pending", comment: "" };
+    var item = state[id] || { status: "pending", comment: "", responses: [] };
+    var own = responseFor(item);
 
     if (button.classList.contains("vz-approve")) {
       save(box, "approved", "");
@@ -397,7 +518,7 @@
       renderBox(box, false);
       var textarea = box.querySelector(".vz-edit textarea");
       if (textarea) {
-        if (!textarea.value) textarea.value = item.comment || "";
+        if (!textarea.value) textarea.value = own.comment || "";
         textarea.focus();
       }
       return;
@@ -418,7 +539,7 @@
       return;
     }
     if (button.classList.contains("vz-undo")) {
-      save(box, "pending", item.status === "changes_requested" ? item.comment || "" : "");
+      save(box, "pending", own.status === "changes_requested" ? own.comment || "" : "");
       return;
     }
   }
@@ -433,7 +554,28 @@
     if (send) send.disabled = !textarea.value.trim();
   }
 
-  function showGate(onDone) {
+  function updateIdentityBadge() {
+    var badge = document.querySelector(".vz-identity");
+    if (!approverName || !reviewerId) {
+      if (badge) badge.remove();
+      return;
+    }
+    if (!badge) {
+      badge = document.createElement("div");
+      badge.className = "vz-identity";
+      document.body.appendChild(badge);
+    }
+    badge.innerHTML = '<span>Identificado: <strong>' + escapeHtml(approverName) + '</strong></span><button type="button">Trocar pessoa</button>';
+    badge.querySelector("button").onclick = function () {
+      approverName = "";
+      reviewerId = "";
+      window.parent.postMessage({ type: "vizantu:identity:clear", slug: slug }, "*");
+      updateIdentityBadge();
+      showGate();
+    };
+  }
+
+  function showGate() {
     if (document.querySelector(".vz-gate")) return;
     var overlay = document.createElement("div");
     overlay.className = "vz-gate";
@@ -451,24 +593,40 @@
     var input = overlay.querySelector("#vz-gate-input");
     var err = overlay.querySelector(".vz-gate-err");
     var btn = overlay.querySelector(".vz-gate-btn");
+    var label = overlay.querySelector('label[for="vz-gate-input"]');
+    if (knownProfiles.length && label) {
+      var profileList = document.createElement("div");
+      profileList.className = "vz-profile-list";
+      knownProfiles.forEach(function (profile) {
+        var profileButton = document.createElement("button");
+        profileButton.type = "button";
+        profileButton.className = "vz-profile";
+        profileButton.textContent = "Continuar como " + profile.name;
+        profileButton.onclick = function () {
+          window.parent.postMessage({ type: "vizantu:identity:select", slug: slug, reviewerId: profile.id }, "*");
+        };
+        profileList.appendChild(profileButton);
+      });
+      label.parentNode.insertBefore(profileList, label);
+      label.textContent = "Ou informe outro nome";
+    }
     window.setTimeout(function () { try { input.focus(); } catch (e) {} }, 60);
     function submit() {
       var name = (input.value || "").trim().replace(/\s+/g, " ");
       if (name.length < 2) { err.textContent = "Digite seu nome para continuar."; try { input.focus(); } catch (e) {} return; }
-      approverName = name;
-      saveApprover(name);
-      if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
-      if (onDone) onDone();
+      btn.disabled = true;
+      btn.textContent = "Salvando...";
+      window.parent.postMessage({ type: "vizantu:identity:save", slug: slug, name: name }, "*");
     }
     btn.addEventListener("click", submit);
     input.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); submit(); } });
   }
 
   function ensureApprover(onReady) {
-    if (approverName) { if (onReady) onReady(); return; }
-    var saved = loadApprover();
-    if (saved) { approverName = saved; if (onReady) onReady(); return; }
-    showGate(onReady);
+    if (approverName && reviewerId) { if (onReady) onReady(); return; }
+    if (onReady) identityCallbacks.push(function () { ensureApprover(onReady); });
+    if (!identityReady) requestIdentity();
+    else showGate();
   }
 
   addStyles();
@@ -479,7 +637,8 @@
   document.addEventListener("click", handleClick, true);
   document.addEventListener("input", handleInput, true);
 
-  approverName = loadApprover();
+  window.addEventListener("message", receiveIdentity);
+  requestIdentity();
   ensureApprover();
 
   api({

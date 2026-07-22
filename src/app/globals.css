@@ -151,6 +151,13 @@ h1 { margin-bottom: 10px; font-size: clamp(34px, 5vw, 56px); line-height: 1.02; 
 .approval-item p { margin: 13px 0 9px; padding: 12px 14px; background: #f7f8f5; border-left: 3px solid var(--accent); color: #3f473f; font-size: 13px; line-height: 1.55; white-space: pre-wrap; }
 .approval-item p.no-comment { color: var(--muted); border-left-color: var(--line); }
 .approval-item small { color: var(--muted); font-size: 10px; }
+.approval-response-list { display: grid; gap: 10px; margin-top: 14px; }
+.approval-response { padding: 12px 13px; border: 1px solid var(--line); background: #fafbf9; }
+.approval-response.approved { border-left: 3px solid var(--approved); background: #f6faef; }
+.approval-response.changes_requested { border-left: 3px solid #e56a3c; background: #fff8f4; }
+.approval-response > div { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.approval-response > div > strong { font-size: 11px; }
+.approval-response p { margin: 9px 0 7px; padding: 9px 11px; }
 .review-status { flex: none; padding: 5px 8px; font-size: 9px; font-weight: 750; text-transform: uppercase; background: #f0f2ee; color: #697069; }
 .review-status.approved { background: #eff8dd; color: #527613; }
 .review-status.changes_requested { background: #fff0eb; color: #a63d1e; }

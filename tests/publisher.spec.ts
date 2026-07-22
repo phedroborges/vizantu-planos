@@ -1,5 +1,18 @@
 import { expect, test } from "@playwright/test";
+import type { FrameLocator, Page } from "@playwright/test";
 import { strToU8, zipSync } from "fflate";
+
+function planFrame(page: Page) {
+  return page.frameLocator("[data-vizantu-plan-frame]");
+}
+
+async function identify(frame: FrameLocator, name: string) {
+  const input = frame.getByLabel("Seu nome");
+  await expect(input).toBeVisible();
+  await input.fill(name);
+  await frame.getByRole("button", { name: "Começar avaliação" }).click();
+  await expect(frame.getByText(`Identificado: ${name}`, { exact: false })).toBeVisible();
+}
 
 test("preserva pareceres simultâneos sem perder histórico", async ({ page }, testInfo) => {
   const slug = `concorrencia-${testInfo.project.name}`;
@@ -23,7 +36,7 @@ test("preserva pareceres simultâneos sem perder histórico", async ({ page }, t
 
   try {
     await page.goto(`/${slug}`);
-    await expect(page.locator(".vz-status-line").first()).toContainText("Aprove este conteúdo");
+    await expect(planFrame(page).locator(".vz-status-line").first()).toContainText("Aprove este conteúdo");
 
     const [first, second] = await Promise.all([
       page.request.post(`/api/plans/${slug}/approvals`, {
@@ -69,12 +82,14 @@ test("sincroniza duas telas e preserva comentário ainda não enviado", async ({
   });
   expect(upload.status()).toBe(201);
 
-  const secondPage = await context.newPage();
+    const secondPage = await context.newPage();
   try {
     await Promise.all([page.goto(`/${slug}`), secondPage.goto(`/${slug}`)]);
-    const firstBox = page.locator('[data-id="item-1"]');
-    const mirroredBox = secondPage.locator('[data-id="item-1"]');
-    const draftBox = secondPage.locator('[data-id="item-2"]');
+    await identify(planFrame(page), "Cliente sincronizado");
+    await identify(planFrame(secondPage), "Cliente sincronizado");
+    const firstBox = planFrame(page).locator('[data-id="item-1"]');
+    const mirroredBox = planFrame(secondPage).locator('[data-id="item-1"]');
+    const draftBox = planFrame(secondPage).locator('[data-id="item-2"]');
     await expect(firstBox.locator(".vz-approve")).toBeVisible();
     await expect(draftBox.locator(".vz-request")).toBeVisible();
 
@@ -111,10 +126,13 @@ test("publica, abre e exclui um HTML", async ({ page, context }, testInfo) => {
   const response = await publicPage.goto(`/${slug}`);
   expect(response?.status()).toBe(200);
   expect(response?.headers()["x-robots-tag"]).toContain("noindex");
-  expect(response?.headers()["content-security-policy"]).toContain("sandbox");
-  await expect(publicPage.getByRole("heading", { name: "Publicação funcionando" })).toBeVisible();
-  await publicPage.getByRole("button", { name: "Testar" }).click();
-  await expect(publicPage.locator("body")).toHaveAttribute("data-clicked", "sim");
+  await expect(publicPage.locator("[data-vizantu-plan-frame]")).toHaveAttribute("sandbox", /allow-scripts/);
+  const documentResponse = await publicPage.request.get(`/api/plans/${slug}/document`);
+  expect(documentResponse.headers()["content-security-policy"]).toContain("sandbox");
+  const publicFrame = planFrame(publicPage);
+  await expect(publicFrame.getByRole("heading", { name: "Publicação funcionando" })).toBeVisible();
+  await publicFrame.getByRole("button", { name: "Testar" }).click();
+  await expect(publicFrame.locator("body")).toHaveAttribute("data-clicked", "sim");
   await publicPage.close();
 
   page.on("dialog", (dialog) => dialog.accept());
@@ -153,12 +171,14 @@ test("compila e publica um projeto React em ZIP", async ({ page }, testInfo) => 
 
   try {
     await page.goto(`/${slug}`);
-    await expect(page.getByRole("heading", { name: "Plano vindo do ZIP" })).toBeVisible();
-    await expect(page.getByAltText("Marca ZIP")).toHaveAttribute("src", /^data:image\/svg\+xml;base64,/);
-    await page.getByRole("button", { name: "Interações 0" }).click();
-    await expect(page.getByRole("button", { name: "Interações 1" })).toBeVisible();
-    await expect(page.locator(".vz-generated-approval")).toHaveCount(1);
-    await expect(page.locator('[data-id="secao-vizantu-slide-01"]')).toContainText("APROVAÇÃO DA SEÇÃO");
+    const frame = planFrame(page);
+    await identify(frame, "Cliente do projeto ZIP");
+    await expect(frame.getByRole("heading", { name: "Plano vindo do ZIP" })).toBeVisible();
+    await expect(frame.getByAltText("Marca ZIP")).toHaveAttribute("src", /^data:image\/svg\+xml;base64,/);
+    await frame.getByRole("button", { name: "Interações 0" }).click();
+    await expect(frame.getByRole("button", { name: "Interações 1" })).toBeVisible();
+    await expect(frame.locator(".vz-generated-approval")).toHaveCount(1);
+    await expect(frame.locator('[data-id="secao-vizantu-slide-01"]')).toContainText("APROVAÇÃO DA SEÇÃO");
   } finally {
     await page.request.delete(`/api/plans/${slug}`);
   }
@@ -188,18 +208,19 @@ test("cria aprovações automaticamente por seção e conteúdo", async ({ page 
 
   try {
     await page.goto(`/${slug}`);
-    await expect(page.locator(".vz-generated-approval")).toHaveCount(3);
-    await expect(page.locator('[data-id="secao-objetivo"]')).toContainText("APROVAÇÃO DA SEÇÃO");
-    await expect(page.locator('[data-id="conteudo-video-1"]')).toContainText("APROVAÇÃO DO CONTEÚDO");
+    const frame = planFrame(page);
+    await identify(frame, "Cliente das seções");
+    await expect(frame.locator(".vz-generated-approval")).toHaveCount(1);
+    await expect(frame.locator('[data-id="conteudo-video-1"]')).toContainText("APROVAÇÃO DO CONTEÚDO");
 
-    const objective = page.locator('[data-id="secao-objetivo"]');
-    await objective.locator(".vz-request").click();
-    await objective.locator(".vz-edit textarea").fill("Rever a meta principal.");
-    await objective.locator(".vz-send").click();
-    await expect(objective.locator(".vz-badge-changes")).toContainText("Ajuste solicitado");
+    const content = frame.locator('[data-id="conteudo-video-1"]');
+    await content.locator(".vz-request").click();
+    await content.locator(".vz-edit textarea").fill("Rever a meta principal.");
+    await content.locator(".vz-send").click();
+    await expect(content.locator(".vz-badge-changes")).toContainText("Ajuste solicitado");
 
     await page.goto(`/revisoes/${slug}`);
-    await expect(page.locator(".approval-item")).toHaveCount(3);
+    await expect(page.locator(".approval-item")).toHaveCount(1);
     await expect(page.getByText("Rever a meta principal.", { exact: true }).first()).toBeVisible();
   } finally {
     await page.request.delete(`/api/plans/${slug}`);
@@ -228,14 +249,16 @@ test("apresentação não recebe fluxo de aprovação", async ({ page }, testInf
 
   try {
     await page.goto(`/${slug}`);
-    await expect(page.getByRole("heading", { name: "Proposta comercial" })).toBeVisible();
-    await expect(page.locator(".vz-generated-approval")).toHaveCount(0);
-    await expect(page.locator('script[data-vizantu-approval-client]')).toHaveCount(0);
+    let frame = planFrame(page);
+    await expect(frame.getByRole("heading", { name: "Proposta comercial" })).toBeVisible();
+    await expect(frame.locator(".vz-generated-approval")).toHaveCount(0);
+    await expect(frame.locator('script[data-vizantu-approval-client]')).toHaveCount(0);
 
     const patched = await page.request.patch(`/api/plans/${slug}`, { data: { kind: "approval" } });
     expect(patched.status()).toBe(200);
     await page.goto(`/${slug}`);
-    await expect(page.locator(".vz-generated-approval")).toHaveCount(1);
+    frame = planFrame(page);
+    await expect(frame.locator('script[data-vizantu-approval-client]')).toHaveCount(1);
   } finally {
     await page.request.delete(`/api/plans/${slug}`);
   }
@@ -269,7 +292,9 @@ test("salva parecer por conteúdo e preserva o histórico", async ({ page }, tes
 
   try {
     await page.goto(`/${slug}`);
-    const box = page.locator('.approval[data-id="conteudo-1"]');
+    const frame = planFrame(page);
+    await identify(frame, "Cliente da aprovação");
+    const box = frame.locator('.approval[data-id="conteudo-1"]');
     await expect(box.locator(".vz-status-line")).toContainText("Aprove este conteúdo ou peça um ajuste.");
 
     const send = box.locator(".vz-send");
@@ -287,6 +312,7 @@ test("salva parecer por conteúdo e preserva o histórico", async ({ page }, tes
     await expect(page.getByText("Solicitou ajuste", { exact: true })).toBeVisible();
 
     await page.goto(`/${slug}`);
+    await expect(frame.locator(".vz-gate")).toHaveCount(0);
     await expect(box.locator(".vz-badge-changes")).toContainText("Ajuste solicitado");
     await box.locator(".vz-undo").click();
     await box.locator(".vz-approve").click();
@@ -354,8 +380,69 @@ test("mostra ajustes e histórico ao lado do editor", async ({ page }, testInfo)
     await expect(page.getByRole("button", { name: "Salvo" })).toBeVisible();
 
     await page.goto(`/${slug}`);
-    await expect(page.getByText("Texto atualizado a partir do parecer.", { exact: true })).toBeVisible();
+    await expect(planFrame(page).getByText("Texto atualizado a partir do parecer.", { exact: true })).toBeVisible();
   } finally {
+    await page.request.delete(`/api/plans/${slug}`);
+  }
+});
+
+test("lembra a pessoa e preserva pareceres independentes no mesmo link", async ({ page, browser }, testInfo) => {
+  const slug = `multiplos-revisores-${testInfo.project.name}`;
+  const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Múltiplos revisores</title></head><body><main><article><h1>Vídeo principal</h1><div class="approval" data-id="video-principal" data-title="Vídeo principal"></div></article></main></body></html>`;
+  const upload = await page.request.post("/api/plans", {
+    multipart: {
+      title: "Múltiplos revisores",
+      slug,
+      file: { name: "multiplos.html", mimeType: "text/html", buffer: Buffer.from(html) },
+    },
+  });
+  expect(upload.status()).toBe(201);
+
+  const fernandoContext = await browser.newContext();
+  const fernandoPage = await fernandoContext.newPage();
+  try {
+    await page.goto(`/${slug}`);
+    let francieleFrame = planFrame(page);
+    await identify(francieleFrame, "Franciele");
+    const francieleBox = francieleFrame.locator('[data-id="video-principal"]');
+    await francieleBox.locator(".vz-request").click();
+    await francieleBox.locator("textarea").fill("Trocar a primeira frase.");
+    await francieleBox.locator(".vz-send").click();
+    await expect(francieleBox.locator(".vz-badge-changes")).toBeVisible();
+
+    await page.reload();
+    francieleFrame = planFrame(page);
+    await expect(francieleFrame.locator(".vz-gate")).toHaveCount(0);
+    await expect(francieleFrame.getByText("Identificado: Franciele", { exact: false })).toBeVisible();
+
+    await fernandoPage.goto(`/${slug}`);
+    const fernandoFrame = planFrame(fernandoPage);
+    await identify(fernandoFrame, "Fernando");
+    const fernandoBox = fernandoFrame.locator('[data-id="video-principal"]');
+    await fernandoBox.locator(".vz-approve").click();
+    await expect(fernandoBox.locator(".vz-badge-approved")).toContainText("Conteúdo aprovado");
+    await expect(fernandoBox.locator(".vz-badge-approved")).toContainText("Fernando");
+
+    let result = await page.request.get(`/api/plans/${slug}/approvals`);
+    let { approvals } = await result.json();
+    expect(approvals.items[0].status).toBe("approved");
+    expect(approvals.items[0].responses).toEqual(expect.arrayContaining([
+      expect.objectContaining({ approverName: "Franciele", status: "changes_requested", comment: "Trocar a primeira frase." }),
+      expect.objectContaining({ approverName: "Fernando", status: "approved" }),
+    ]));
+
+    await page.goto(`/revisoes/${slug}`);
+    await expect(page.getByText("Franciele", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText("Fernando", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText("Trocar a primeira frase.", { exact: true }).first()).toBeVisible();
+
+    await fernandoBox.locator(".vz-undo").click();
+    await expect(fernandoBox.locator(".vz-badge-changes")).toBeVisible();
+    result = await page.request.get(`/api/plans/${slug}/approvals`);
+    ({ approvals } = await result.json());
+    expect(approvals.items[0].status).toBe("changes_requested");
+  } finally {
+    await fernandoContext.close();
     await page.request.delete(`/api/plans/${slug}`);
   }
 });

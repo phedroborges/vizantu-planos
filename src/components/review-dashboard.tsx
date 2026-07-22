@@ -42,8 +42,12 @@ function planStatus(items: ApprovalItem[]) {
 function buildReport(plan: Plan, approvals: PlanApprovals) {
   const overall = planStatus(approvals.items);
   const lines = approvals.items.map((item) => {
-    const comment = item.comment ? `\nComentário: ${item.comment}` : "";
-    return `${item.title}: ${statusLabel(item.status).toUpperCase()}${comment}`;
+    const responses = (item.responses || []).filter((response) => response.status !== "pending");
+    const details = responses.map((response) => {
+      const comment = response.comment ? `\n  Comentário: ${response.comment}` : "";
+      return `- ${response.approverName}: ${statusLabel(response.status).toUpperCase()}${comment}`;
+    });
+    return `${item.title}: ${statusLabel(item.status).toUpperCase()}${details.length ? `\n${details.join("\n")}` : ""}`;
   });
   return `${plan.title}\n${overall.label}\n\n${lines.join("\n\n")}`;
 }
@@ -138,8 +142,17 @@ export function ReviewDashboard({ plan, initialApprovals }: { plan: Plan; initia
                     <a href={`/${plan.slug}#${item.id}`} target="_blank" rel="noreferrer">{item.title}</a>
                     <span className={`review-status ${item.status}`}>{statusLabel(item.status)}</span>
                   </div>
-                  {item.comment ? <p>{item.comment}</p> : <p className="no-comment">Nenhum comentário neste conteúdo.</p>}
-                  <small>{item.approverName ? <><strong>{item.approverName}</strong> · </> : null}{formatDate(item.updatedAt)}</small>
+                  {(item.responses || []).some((response) => response.status !== "pending") ? (
+                    <div className="approval-response-list">
+                      {(item.responses || []).filter((response) => response.status !== "pending").map((response) => (
+                        <div className={`approval-response ${response.status}`} key={response.reviewerId}>
+                          <div><strong>{response.approverName}</strong><span className={`review-status ${response.status}`}>{statusLabel(response.status)}</span></div>
+                          {response.comment ? <p>{response.comment}</p> : null}
+                          <small>{formatDate(response.updatedAt)}</small>
+                        </div>
+                      ))}
+                    </div>
+                  ) : <p className="no-comment">Nenhum parecer registrado neste conteúdo.</p>}
                 </article>
               ))}
             </div>

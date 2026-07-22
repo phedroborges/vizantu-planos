@@ -19,6 +19,14 @@ export type PlanWithHtml = {
 
 export type ApprovalStatus = "pending" | "approved" | "changes_requested";
 
+export type ApprovalResponse = {
+  reviewerId: string;
+  approverName: string;
+  status: ApprovalStatus;
+  comment: string;
+  updatedAt: string;
+};
+
 export type ApprovalItem = {
   id: string;
   title: string;
@@ -26,6 +34,7 @@ export type ApprovalItem = {
   comment: string;
   updatedAt?: string;
   approverName?: string;
+  responses?: ApprovalResponse[];
 };
 
 export type ApprovalEvent = {
@@ -38,6 +47,7 @@ export type ApprovalEvent = {
   comment: string;
   createdAt: string;
   approverName?: string;
+  reviewerId?: string;
 };
 
 export type PlanApprovals = {

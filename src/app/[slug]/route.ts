@@ -1,41 +1,95 @@
+import { randomBytes } from "node:crypto";
 import { isAllowedSlug } from "@/lib/slug";
 import { getPlan } from "@/lib/storage";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function addStorageShim(html: string) {
-  const storageShim = `<script data-vizantu-storage-shim>(function(){function memory(){var values={};return{getItem:function(key){return Object.prototype.hasOwnProperty.call(values,key)?values[key]:null},setItem:function(key,value){values[key]=String(value)},removeItem:function(key){delete values[key]},clear:function(){values={}},key:function(index){return Object.keys(values)[index]||null},get length(){return Object.keys(values).length}}}["localStorage","sessionStorage"].forEach(function(name){try{window[name].getItem("__vizantu_test__")}catch(error){try{Object.defineProperty(window,name,{configurable:true,value:memory()})}catch(ignore){}}})})();</script>`;
-  if (html.includes("data-vizantu-storage-shim")) return html;
-  return /<head(?:\s[^>]*)?>/i.test(html) ? html.replace(/<head(?:\s[^>]*)?>/i, (head) => `${head}${storageShim}`) : `${storageShim}${html}`;
+function escapeHtml(value: string) {
+  return value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 }
 
-function addApprovalClient(html: string, slug: string) {
-  if (html.includes("data-vizantu-approval-client")) return html;
-  const client = `<script src="/approval-client.js" data-plan-slug="${slug}" data-vizantu-approval-client defer></script>`;
-  return /<\/body>/i.test(html) ? html.replace(/<\/body>/i, `${client}</body>`) : `${html}${client}`;
-}
+function reviewerHostScript(slug: string) {
+  return `(function(){
+    "use strict";
+    var slug=${JSON.stringify(slug)};
+    var frame=document.getElementById("vz-plan-frame");
+    var profilesKey="vizantu-reviewer-profiles:v1";
+    var activeKey="vizantu-reviewer-active:v1";
+    var memoryProfiles=[];
+    var memoryActive="";
 
-function hideApprovalMarkup(html: string) {
-  if (html.includes("data-vizantu-presentation")) return html;
-  const style = `<style data-vizantu-presentation>.approval,[id^="appr-"]{display:none!important}</style>`;
-  return /<\/head>/i.test(html) ? html.replace(/<\/head>/i, `${style}</head>`) : `${style}${html}`;
-}
+    function readProfiles(){
+      try{
+        var value=JSON.parse(window.localStorage.getItem(profilesKey)||"[]");
+        return Array.isArray(value)?value.filter(validProfile).slice(0,12):[];
+      }catch(error){return memoryProfiles.filter(validProfile).slice(0,12);}
+    }
+    function readActive(){
+      try{return window.localStorage.getItem(activeKey)||"";}catch(error){return memoryActive;}
+    }
+    function writeState(profiles,active){
+      memoryProfiles=profiles;
+      memoryActive=active||"";
+      try{
+        window.localStorage.setItem(profilesKey,JSON.stringify(profiles));
+        if(active)window.localStorage.setItem(activeKey,active);else window.localStorage.removeItem(activeKey);
+      }catch(error){}
+    }
+    function validProfile(profile){
+      return Boolean(profile&&typeof profile.id==="string"&&typeof profile.name==="string"&&profile.id.length<=120&&profile.name.trim().length>=2);
+    }
+    function cleanName(value){return String(value||"").trim().replace(/\\s+/g," ").slice(0,120);}
+    function createId(){
+      try{return "reviewer-"+window.crypto.randomUUID().replace(/-/g,"");}
+      catch(error){return "reviewer-"+Date.now().toString(36)+Math.random().toString(36).slice(2);}
+    }
+    function state(){
+      var profiles=readProfiles();
+      var activeId=readActive();
+      var active=profiles.find(function(profile){return profile.id===activeId;})||null;
+      return {profiles:profiles,active:active};
+    }
+    function send(){
+      if(!frame||!frame.contentWindow)return;
+      var current=state();
+      frame.contentWindow.postMessage({type:"vizantu:identity:state",slug:slug,active:current.active,profiles:current.profiles},"*");
+    }
+    function saveName(name){
+      name=cleanName(name);
+      if(name.length<2)return send();
+      var profiles=readProfiles();
+      var profile=profiles.find(function(entry){return entry.name.toLocaleLowerCase("pt-BR")===name.toLocaleLowerCase("pt-BR");});
+      var now=new Date().toISOString();
+      if(profile){profile.name=name;profile.lastUsedAt=now;}
+      else{profile={id:createId(),name:name,createdAt:now,lastUsedAt:now};profiles.unshift(profile);}
+      profiles=profiles.sort(function(a,b){return String(b.lastUsedAt||"").localeCompare(String(a.lastUsedAt||""));}).slice(0,12);
+      writeState(profiles,profile.id);
+      send();
+    }
+    function selectProfile(id){
+      var profiles=readProfiles();
+      var profile=profiles.find(function(entry){return entry.id===id;});
+      if(!profile)return send();
+      profile.lastUsedAt=new Date().toISOString();
+      writeState(profiles,profile.id);
+      send();
+    }
 
-function addVizantuWatermark(html: string) {
-  if (html.includes("data-vizantu-watermark")) return html;
-  const badge =
-    `<style data-vizantu-watermark-style>` +
-    `[data-vizantu-watermark]{position:fixed;left:18px;bottom:18px;z-index:2147483000;display:flex;align-items:center;gap:9px;padding:9px 14px;border-radius:999px;background:rgba(16,16,16,.74);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);box-shadow:0 8px 24px rgba(0,0,0,.24);text-decoration:none;opacity:.9;transition:opacity .2s ease,transform .2s ease}` +
-    `[data-vizantu-watermark]:hover{opacity:1;transform:translateY(-1px)}` +
-    `[data-vizantu-watermark] span{font-family:Arial,Helvetica,sans-serif;font-size:8.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:rgba(255,255,255,.66);white-space:nowrap}` +
-    `[data-vizantu-watermark] img{height:15px;width:auto;display:block}` +
-    `@media print{[data-vizantu-watermark],[data-vizantu-watermark-style]{display:none!important}}` +
-    `@media(max-width:640px){[data-vizantu-watermark]{left:12px;bottom:12px;padding:7px 11px}[data-vizantu-watermark] span{display:none}}` +
-    `</style>` +
-    `<a href="https://vizantu.com.br" target="_blank" rel="noopener" data-vizantu-watermark aria-label="Plano criado pela Vizantu">` +
-    `<span>Plano criado por</span><img src="/brand/vizantu-white.svg" alt="Vizantu"></a>`;
-  return /<\/body>/i.test(html) ? html.replace(/<\/body>/i, `${badge}</body>`) : `${html}${badge}`;
+    window.addEventListener("message",function(event){
+      if(!frame||event.source!==frame.contentWindow||!event.data||event.data.slug!==slug)return;
+      if(event.data.type==="vizantu:identity:get")send();
+      if(event.data.type==="vizantu:identity:save")saveName(event.data.name);
+      if(event.data.type==="vizantu:identity:select")selectProfile(event.data.reviewerId);
+      if(event.data.type==="vizantu:identity:clear"){writeState(readProfiles(),"");send();}
+    });
+
+    if(frame){
+      var source=frame.getAttribute("data-src")||"";
+      frame.src=source+(window.location.hash||"");
+      frame.addEventListener("load",send);
+    }
+  })();`;
 }
 
 function notFound() {
@@ -51,15 +105,15 @@ export async function GET(_: Request, { params }: { params: Promise<{ slug: stri
   const result = await getPlan(slug);
   if (!result) return notFound();
 
-  const isPresentation = result.plan.kind === "presentation";
-  const base = addStorageShim(result.html);
-  const withApproval = isPresentation ? hideApprovalMarkup(base) : addApprovalClient(base, slug);
-  const html = addVizantuWatermark(withApproval);
+  const nonce = randomBytes(18).toString("base64");
+  const title = escapeHtml(result.plan.title);
+  const documentUrl = `/api/plans/${encodeURIComponent(slug)}/document`;
+  const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>html,body{width:100%;height:100%;margin:0;overflow:hidden;background:#fff}iframe{display:block;width:100%;height:100%;border:0;background:#fff}noscript{position:fixed;inset:0;display:grid;place-items:center;padding:30px;font:16px Arial,sans-serif}</style></head><body><iframe id="vz-plan-frame" data-vizantu-plan-frame data-src="${documentUrl}" title="${title}" sandbox="allow-scripts allow-forms allow-modals allow-downloads allow-popups allow-popups-to-escape-sandbox"></iframe><noscript>Ative o JavaScript para visualizar este plano.</noscript><script nonce="${nonce}" data-vizantu-reviewer-host>${reviewerHostScript(slug)}</script></body></html>`;
 
   return new Response(html, {
     headers: {
       "Content-Type": "text/html; charset=utf-8",
-      "Content-Security-Policy": "sandbox allow-scripts allow-forms allow-modals allow-downloads allow-popups allow-popups-to-escape-sandbox",
+      "Content-Security-Policy": `default-src 'none'; frame-src 'self'; script-src 'nonce-${nonce}'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'`,
       "Cache-Control": "no-store, max-age=0",
       "Referrer-Policy": "strict-origin-when-cross-origin",
       "X-Content-Type-Options": "nosniff",
