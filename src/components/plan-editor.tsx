@@ -19,13 +19,14 @@ const EDITOR_STYLE = `
   @keyframes vzEditorTarget{0%,100%{box-shadow:0 0 0 0 rgba(229,106,60,0)}35%{box-shadow:0 0 0 12px rgba(229,106,60,.2)}}
 `;
 
-export function PlanEditor({ slug, title, html, initialApprovals }: { slug: string; title: string; html: string; initialApprovals: PlanApprovals }) {
+export function PlanEditor({ slug, title, html, reviewVersion, initialApprovals }: { slug: string; title: string; html: string; reviewVersion: number; initialApprovals: PlanApprovals }) {
   const frameRef = useRef<HTMLIFrameElement>(null);
   const highlightTimerRef = useRef<number | null>(null);
   const [dirty, setDirty] = useState(false);
   const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [message, setMessage] = useState("");
   const [historyOpen, setHistoryOpen] = useState(true);
+  const [currentVersion, setCurrentVersion] = useState(reviewVersion);
 
   const setupEditor = useCallback(() => {
     const doc = frameRef.current?.contentDocument;
@@ -92,14 +93,20 @@ export function PlanEditor({ slug, title, html, initialApprovals }: { slug: stri
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || "Não foi possível salvar.");
       }
+      const data = await res.json();
+      const savedVersion = Number(data.plan?.reviewVersion) || currentVersion;
+      const createdVersion = savedVersion > currentVersion;
+      setCurrentVersion(savedVersion);
       setStatus("saved");
       setDirty(false);
-      setMessage("Alterações salvas. O plano já está atualizado para o próximo envio.");
+      setMessage(createdVersion
+        ? `Versão ${savedVersion} criada. Os conteúdos ajustados foram reabertos para aprovação.`
+        : "Alterações salvas. O plano já está atualizado.");
     } catch (err) {
       setStatus("error");
       setMessage(err instanceof Error ? err.message : "Não foi possível salvar.");
     }
-  }, [slug]);
+  }, [currentVersion, slug]);
 
   useEffect(() => {
     function beforeUnload(e: BeforeUnloadEvent) {
@@ -146,7 +153,7 @@ export function PlanEditor({ slug, title, html, initialApprovals }: { slug: stri
       <div className="editor-bar">
         <Link className="editor-back" href="/"><ArrowLeft size={15} /> Painel</Link>
         <div className="editor-title">
-          <strong>Editando</strong>
+          <strong>Editando · Versão {currentVersion}</strong>
           <span>{title}</span>
         </div>
         <div className="editor-actions">

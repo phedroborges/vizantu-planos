@@ -59,6 +59,8 @@
   var identityCallbacks = [];
   var approvalDeadline = "";
   var approvalDeadlineLabel = "";
+  var reviewVersion = 1;
+  var reviewStatus = "active";
 
   function requestIdentity() {
     if (window.parent !== window) {
@@ -83,10 +85,12 @@
     reviewerId = active && active.id ? String(active.id) : "";
     approvalDeadline = event.data.deadlineAt ? String(event.data.deadlineAt) : "";
     approvalDeadlineLabel = event.data.deadlineLabel ? String(event.data.deadlineLabel) : "";
+    reviewVersion = Number(event.data.reviewVersion) || 1;
+    setReviewStatus(event.data.reviewStatus || "active", false);
     identityReady = true;
     updateIdentityBadge();
     flushIdentityCallbacks();
-    if (!reviewerId) showGate();
+    if (!reviewerId && reviewStatus !== "approved") showGate();
     else document.querySelector(".vz-gate")?.remove();
     boxes.forEach(function (box) { renderBox(box, false); });
   }
@@ -99,6 +103,10 @@
       /* esconde os controles antigos embutidos nos planos */
       ".approval[data-id] .approval-btns{display:none!important}",
       ".approval[data-id]>textarea{display:none!important}",
+      "html.vz-review-approved:not(.vz-review-details) .approval[data-id]{display:none!important}",
+      ".approval[data-id].vz-carried-approved{display:none!important}",
+      ".vz-review-complete{position:fixed;right:16px;bottom:62px;z-index:2147483390;display:flex;align-items:center;gap:9px;padding:9px 12px;border:1px solid #bcd98f;border-radius:999px;background:#eef7e4;box-shadow:0 8px 24px rgba(0,0,0,.18);font:700 11px Arial,sans-serif;color:#2c5237}",
+      ".vz-review-complete button{border:0;background:transparent;padding:2px;color:#3d671f;cursor:pointer;font:700 10px Arial,sans-serif;text-decoration:underline}",
       /* caixa gerada */
       ".vz-generated-approval{box-sizing:border-box;margin-top:32px;padding:20px;border:1px solid rgba(31,43,34,.18);border-radius:6px;background:#fff;color:#18201a;box-shadow:0 8px 24px rgba(25,35,27,.06);font-family:Arial,sans-serif}",
       ".vz-generated-head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:16px}",
@@ -329,6 +337,11 @@
     var id = box.dataset.id;
     var item = state[id] || { status: "pending", comment: "", responses: [] };
     var responses = Array.isArray(item.responses) ? item.responses.filter(function (response) { return response.status !== "pending"; }) : [];
+    var approvedResponsesForVersion = responses.filter(function (response) { return response.status === "approved"; });
+    var carriedApproval = item.status === "approved" && approvedResponsesForVersion.length > 0 && approvedResponsesForVersion.every(function (response) {
+      return (Number(response.reviewVersion) || 1) < reviewVersion;
+    });
+    box.classList.toggle("vz-carried-approved", carriedApproval);
     var own = responseFor(item);
     var choice = box.querySelector(".vz-choice");
     var edit = box.querySelector(".vz-edit");
@@ -395,9 +408,44 @@
     var approved = items.filter(function (item) { return item.status === "approved"; }).length;
     var changes = items.filter(function (item) { return item.status === "changes_requested"; }).length;
     var done = approved + changes;
-    var overall = changes ? "Plano com ajustes" : approved === items.length ? "Plano aprovado" : approved === 0 ? "Aguardando cliente" : "Em revisão";
+    var complete = items.length > 0 && done === items.length;
+    var overall = complete ? (changes ? "Plano com ajustes" : "Plano aprovado") : approved === 0 ? "Aguardando cliente" : "Em revisão";
     var counter = document.getElementById("appr-count");
     if (counter) counter.textContent = done + " de " + items.length + " conteúdos avaliados · " + overall;
+    setReviewStatus(complete ? (changes ? "adjustments" : "approved") : "active", true);
+  }
+
+  function setReviewStatus(nextStatus, notifyParent) {
+    if (!/^(active|approved|adjustments)$/.test(nextStatus)) nextStatus = "active";
+    var previousStatus = reviewStatus;
+    reviewStatus = nextStatus;
+    document.documentElement.classList.toggle("vz-review-approved", reviewStatus === "approved");
+    if (reviewStatus !== "approved") document.documentElement.classList.remove("vz-review-details");
+    updateReviewCompleteControl();
+    if (reviewStatus === "approved") document.querySelector(".vz-gate")?.remove();
+    else if (previousStatus === "approved" && identityReady && !reviewerId) showGate();
+    if (notifyParent && window.parent !== window) {
+      window.parent.postMessage({ type: "vizantu:review:status", slug: slug, status: reviewStatus }, "*");
+    }
+  }
+
+  function updateReviewCompleteControl() {
+    var control = document.querySelector(".vz-review-complete");
+    if (reviewStatus !== "approved" || document.documentElement.classList.contains("vz-review-details")) {
+      if (control) control.remove();
+      return;
+    }
+    if (!control) {
+      control = document.createElement("div");
+      control.className = "vz-review-complete";
+      control.innerHTML = '<span>Plano aprovado</span><button type="button">Rever minha decisão</button>';
+      document.body.appendChild(control);
+      control.querySelector("button").onclick = function () {
+        if (!reviewerId) { showGate(); return; }
+        document.documentElement.classList.add("vz-review-details");
+        control.remove();
+      };
+    }
   }
 
   function buildReport() {
@@ -586,7 +634,7 @@
     overlay.className = "vz-gate";
     overlay.innerHTML =
       '<div class="vz-gate-card" role="dialog" aria-modal="true" aria-label="Identifique-se para avaliar">' +
-        '<span class="vz-gate-eyebrow">Aprovação do plano</span>' +
+        '<span class="vz-gate-eyebrow">Aprovação do plano · Versão ' + reviewVersion + '</span>' +
         '<h3>Antes de começar, quem é você?</h3>' +
         '<p>Cada aprovação e pedido de ajuste fica registrado com o seu nome. Assim a equipe sabe exatamente quem avaliou cada conteúdo.</p>' +
         (approvalDeadline ? '<div class="vz-gate-rule"><strong>Prazo: ' + escapeHtml(approvalDeadlineLabel) + '</strong>Após esse horário, este link será fechado e tudo que estiver no plano será considerado aprovado automaticamente.</div>' : '') +
@@ -629,6 +677,7 @@
   }
 
   function ensureApprover(onReady) {
+    if (reviewStatus === "approved") { if (onReady) onReady(); return; }
     if (approverName && reviewerId) { if (onReady) onReady(); return; }
     if (onReady) identityCallbacks.push(function () { ensureApprover(onReady); });
     if (!identityReady) requestIdentity();

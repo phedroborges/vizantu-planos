@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { isAllowedSlug } from "@/lib/slug";
-import { isPlanExpired } from "@/lib/approval-deadline";
 import { applyPlanDeadline, getPlan, getPlanApprovals, recordApproval, summarizeApprovals, syncApprovalItems } from "@/lib/storage";
 
 export const runtime = "nodejs";
@@ -57,8 +56,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     if (!parsed.success) return json({ error: "Revise os dados da avaliação." }, { status: 400 });
     const result = await getPlan(slug);
     if (!result) return json({ error: "Plano não encontrado." }, { status: 404 });
-    if (isPlanExpired(result.plan)) {
-      const approvals = applyPlanDeadline(result.plan, await getPlanApprovals(slug));
+    const storedApprovals = await getPlanApprovals(slug);
+    const effectiveApprovals = applyPlanDeadline(result.plan, storedApprovals);
+    if (effectiveApprovals.autoApproved) {
+      const approvals = effectiveApprovals;
       return json({
         error: "O prazo de aprovação terminou e este plano foi aprovado automaticamente.",
         approvals,
@@ -66,7 +67,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       }, { status: 409 });
     }
 
-    const approvals = parsed.data.action === "sync"
+    const stored = parsed.data.action === "sync"
       ? await syncApprovalItems(slug, parsed.data.items)
       : await recordApproval({
           slug,
@@ -76,7 +77,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
           comment: parsed.data.comment,
           approverName: parsed.data.approverName,
           reviewerId: parsed.data.reviewerId,
+          reviewVersion: result.plan.reviewVersion || 1,
         });
+    const approvals = applyPlanDeadline(result.plan, stored);
 
     return json({ approvals, summary: summarizeApprovals(approvals) });
   } catch (error) {

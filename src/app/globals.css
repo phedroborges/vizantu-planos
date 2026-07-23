@@ -140,6 +140,7 @@ h1 { margin-bottom: 10px; font-size: clamp(34px, 5vw, 56px); line-height: 1.02; 
 .deadline-admin-notice { margin: -8px 0 28px; padding: 14px 17px; display: flex; gap: 8px 18px; align-items: baseline; border-left: 4px solid var(--approved); background: #f2f8e8; color: #49651c; font-size: 12px; line-height: 1.5; }
 .deadline-admin-notice strong { flex: none; }
 .deadline-admin-notice.active { border-left-color: var(--accent-strong); background: #f3effd; color: #4d3970; }
+.deadline-admin-notice.adjustments { border-left-color: #e56a3c; background: #fff3ed; color: #8f351b; }
 .review-section { background: white; border: 1px solid var(--line); min-width: 0; }
 .section-title { min-height: 88px; padding: 20px 24px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; gap: 20px; }
 .section-title .eyebrow { margin-bottom: 5px; }
@@ -287,7 +288,14 @@ h1 { margin-bottom: 10px; font-size: clamp(34px, 5vw, 56px); line-height: 1.02; 
   .editor-bar { flex-wrap: wrap; min-height: 0; padding: 10px 14px; gap: 10px; }
   .editor-title span { max-width: 60vw; }
   .editor-actions { width: 100%; gap: 7px; }
-  .editor-msg { display: none; }
+  .editor-msg {
+    display: block;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   .editor-history-toggle { padding: 0 9px; }
   .editor-ghost { padding: 8px 9px; }
   .editor-save { margin-left: auto; }

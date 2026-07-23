@@ -1,6 +1,5 @@
 import { isAllowedSlug } from "@/lib/slug";
-import { isPlanExpired } from "@/lib/approval-deadline";
-import { getPlan } from "@/lib/storage";
+import { applyPlanDeadline, getPlan, getPlanApprovals } from "@/lib/storage";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -57,7 +56,8 @@ export async function GET(_: Request, { params }: { params: Promise<{ slug: stri
   if (!isAllowedSlug(slug)) return notFound();
   const result = await getPlan(slug);
   if (!result) return notFound();
-  if (isPlanExpired(result.plan)) {
+  const approvals = applyPlanDeadline(result.plan, await getPlanApprovals(slug));
+  if (approvals.autoApproved) {
     return new Response("O prazo de aprovação terminou e este plano foi aprovado automaticamente.", {
       status: 410,
       headers: {

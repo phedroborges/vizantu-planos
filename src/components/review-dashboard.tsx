@@ -33,9 +33,11 @@ function planStatus(approvals: PlanApprovals) {
   const items = approvals.items;
   const approved = items.filter((item) => item.status === "approved").length;
   const changes = items.filter((item) => item.status === "changes_requested").length;
+  const pending = items.length - approved - changes;
   if (approvals.autoApproved) return { label: "Plano aprovado automaticamente", tone: "approved", approved: items.length, changes: 0 };
   if (!items.length) return { label: "Aguardando acesso", tone: "pending", approved, changes };
-  if (changes) return { label: "Plano com ajustes", tone: "adjustments", approved, changes };
+  if (changes && pending === 0) return { label: "Plano com ajustes", tone: "adjustments", approved, changes };
+  if (changes) return { label: "Plano em revisão", tone: "review", approved, changes };
   if (approved === items.length) return { label: "Plano aprovado", tone: "approved", approved, changes };
   if (approved === 0) return { label: "Aguardando cliente", tone: "pending", approved, changes };
   return { label: "Plano em revisão", tone: "review", approved, changes };
@@ -51,7 +53,7 @@ function buildReport(plan: Plan, approvals: PlanApprovals) {
     });
     return `${item.title}: ${statusLabel(item.status).toUpperCase()}${details.length ? `\n${details.join("\n")}` : ""}`;
   });
-  return `${plan.title}\n${overall.label}\n\n${lines.join("\n\n")}`;
+  return `${plan.title}\nVersão ${approvals.reviewVersion || plan.reviewVersion || 1}\n${overall.label}\n\n${lines.join("\n\n")}`;
 }
 
 export function ReviewDashboard({ plan, initialApprovals }: { plan: Plan; initialApprovals: PlanApprovals }) {
@@ -60,6 +62,7 @@ export function ReviewDashboard({ plan, initialApprovals }: { plan: Plan; initia
   const [copied, setCopied] = useState(false);
   const overall = useMemo(() => planStatus(approvals), [approvals]);
   const pending = approvals.items.length - overall.approved - overall.changes;
+  const currentVersion = approvals.reviewVersion || plan.reviewVersion || 1;
 
   const refresh = useCallback(async (silent = false) => {
     if (!silent) setIsRefreshing(true);
@@ -101,7 +104,7 @@ export function ReviewDashboard({ plan, initialApprovals }: { plan: Plan; initia
     <>
       <div className="review-heading">
         <div>
-          <span className="eyebrow">Acompanhamento do cliente</span>
+          <span className="eyebrow">Acompanhamento do cliente · Versão {currentVersion}</span>
           <h1>{plan.title}</h1>
           <p>Decisões e comentários são atualizados automaticamente.</p>
         </div>
@@ -134,6 +137,16 @@ export function ReviewDashboard({ plan, initialApprovals }: { plan: Plan; initia
         <div className="deadline-admin-notice">
           <strong>Prazo encerrado</strong>
           <span>O link foi fechado e o plano foi aprovado automaticamente em {formatDate(approvals.deadlineAt)}. Os pareceres anteriores continuam preservados no histórico.</span>
+        </div>
+      ) : approvals.items.length > 0 && pending === 0 && overall.changes === 0 ? (
+        <div className="deadline-admin-notice">
+          <strong>Versão {currentVersion} aprovada</strong>
+          <span>Todos os conteúdos foram aprovados. O contador foi encerrado e os controles de aprovação não aparecem mais no link do cliente.</span>
+        </div>
+      ) : approvals.items.length > 0 && pending === 0 && overall.changes > 0 ? (
+        <div className="deadline-admin-notice adjustments">
+          <strong>Versão {currentVersion} concluída com ajustes</strong>
+          <span>O contador foi encerrado. Ao corrigir e salvar pelo editor, a Versão {currentVersion + 1} será criada automaticamente.</span>
         </div>
       ) : plan.approvalDeadline ? (
         <div className="deadline-admin-notice active">
@@ -193,7 +206,7 @@ export function ReviewDashboard({ plan, initialApprovals }: { plan: Plan; initia
                     <strong>{actionLabel(event.action)}</strong>
                     <p>{event.itemTitle}</p>
                     {event.comment ? <blockquote>{event.comment}</blockquote> : null}
-                    <small>{event.approverName ? <><strong>{event.approverName}</strong> · </> : null}{formatDate(event.createdAt)}</small>
+                    <small>{event.approverName ? <><strong>{event.approverName}</strong> · </> : null}Versão {event.reviewVersion || 1} · {formatDate(event.createdAt)}</small>
                   </div>
                 </li>
               ))}

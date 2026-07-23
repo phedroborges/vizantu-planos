@@ -10,6 +10,8 @@ export type Plan = {
   kind?: PlanKind;
   approvalDeadline?: string;
   approvalPeriodDays?: number;
+  reviewVersion?: number;
+  versionUpdatedAt?: string;
   htmlUrl?: string;
   metadataUrl?: string;
 };
@@ -27,6 +29,7 @@ export type ApprovalResponse = {
   status: ApprovalStatus;
   comment: string;
   updatedAt: string;
+  reviewVersion?: number;
 };
 
 export type ApprovalItem = {
@@ -50,6 +53,7 @@ export type ApprovalEvent = {
   createdAt: string;
   approverName?: string;
   reviewerId?: string;
+  reviewVersion?: number;
 };
 
 export type PlanApprovals = {
@@ -60,6 +64,7 @@ export type PlanApprovals = {
   eventIds?: string[];
   autoApproved?: boolean;
   deadlineAt?: string;
+  reviewVersion?: number;
 };
 
 export type ApprovalSummary = {
@@ -71,4 +76,6 @@ export type ApprovalSummary = {
   updatedAt?: string;
   autoApproved?: boolean;
   deadlineAt?: string;
+  roundComplete?: boolean;
+  reviewVersion?: number;
 };

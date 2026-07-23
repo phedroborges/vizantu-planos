@@ -56,7 +56,8 @@ function formatDeadline(value?: string) {
 function approvalPresentation(summary: ApprovalSummary) {
   if (summary.autoApproved) return { label: "Plano aprovado", tone: "approved", detail: "Aprovação automática" };
   if (summary.status === "approved") return { label: "Plano aprovado", tone: "approved", detail: `${summary.approved}/${summary.total} aprovados` };
-  if (summary.status === "changes_requested") return { label: "Plano com ajustes", tone: "adjustments", detail: `${summary.changesRequested} ${summary.changesRequested === 1 ? "ajuste" : "ajustes"}` };
+  if (summary.status === "changes_requested" && summary.roundComplete) return { label: "Plano com ajustes", tone: "adjustments", detail: `${summary.changesRequested} ${summary.changesRequested === 1 ? "ajuste" : "ajustes"}` };
+  if (summary.status === "changes_requested") return { label: "Em revisão", tone: "review", detail: `${summary.pending} aguardando · ${summary.changesRequested} com ajuste` };
   if (summary.status === "in_review") return { label: "Em revisão", tone: "review", detail: `${summary.approved}/${summary.total} aprovados` };
   if (summary.status === "pending") return { label: "Aguardando cliente", tone: "pending", detail: `${summary.total} conteúdos` };
   return { label: "Aguardando acesso", tone: "pending", detail: "Sem avaliação" };
@@ -271,7 +272,11 @@ export function Dashboard({
                         {isPresentation
                           ? <><span className="status presentation"><Presentation size={11} /> Apresentação</span><br />Sem fluxo de aprovação</>
                           : <><span className={`status ${approval.tone}`}>{approval.label}</span><br />{approval.detail}</>}
-                        {!isPresentation ? <><br />{summary.autoApproved ? "Prazo encerrado · aprovação automática" : formatDeadline(plan.approvalDeadline)}</> : null}
+                        {!isPresentation ? <><br />Versão {plan.reviewVersion || 1} · {summary.autoApproved
+                          ? "prazo encerrado"
+                          : summary.roundComplete
+                            ? "revisão concluída"
+                            : formatDeadline(plan.approvalDeadline).replace(/^Prazo:\s*/, "prazo ")}</> : null}
                         <br />{formatDate(plan.updatedAt)} · {formatBytes(plan.size)}
                       </div>
                       <div className="actions">

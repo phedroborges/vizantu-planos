@@ -77,7 +77,7 @@ export function EditorReviewSidebar({
     <aside className="editor-review" aria-label="Histórico de alterações solicitado pelo cliente">
       <div className="editor-review-head">
         <div>
-          <span>Revisão do cliente</span>
+          <span>Revisão do cliente · Versão {approvals.reviewVersion || 1}</span>
           <h2>Ajustes e histórico</h2>
         </div>
         <button type="button" onClick={() => refresh()} disabled={isRefreshing} aria-label="Atualizar histórico">
@@ -130,7 +130,7 @@ export function EditorReviewSidebar({
                     <strong>{actionLabel(event)}</strong>
                     <span>{event.itemTitle}</span>
                     {event.comment ? <blockquote>{event.comment}</blockquote> : null}
-                    <small>{event.approverName ? <><strong>{event.approverName}</strong> · </> : null}{formatDate(event.createdAt)}</small>
+                    <small>{event.approverName ? <><strong>{event.approverName}</strong> · </> : null}Versão {event.reviewVersion || 1} · {formatDate(event.createdAt)}</small>
                   </span>
                 </button>
               </li>

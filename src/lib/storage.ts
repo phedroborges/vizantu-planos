@@ -282,6 +282,7 @@ function mergeApprovalEvents(approvals: PlanApprovals, events: ApprovalEvent[]) 
       status: event.status,
       comment: event.comment,
       updatedAt: event.createdAt,
+      reviewVersion: event.reviewVersion,
     };
     const responses = [...(current.responses || [])];
     const responseIndex = responses.findIndex((entry) => entry.reviewerId === reviewerId);
@@ -323,6 +324,7 @@ export function summarizeApprovals(approvals: PlanApprovals): ApprovalSummary {
   const approved = approvals.autoApproved ? total : approvals.items.filter((item) => item.status === "approved").length;
   const changesRequested = approvals.autoApproved ? 0 : approvals.items.filter((item) => item.status === "changes_requested").length;
   const pending = total - approved - changesRequested;
+  const roundComplete = total > 0 && pending === 0;
   let status: ApprovalSummary["status"] = "not_started";
 
   if (approvals.autoApproved) status = "approved";
@@ -341,16 +343,26 @@ export function summarizeApprovals(approvals: PlanApprovals): ApprovalSummary {
     updatedAt: approvals.updatedAt,
     autoApproved: approvals.autoApproved,
     deadlineAt: approvals.deadlineAt,
+    roundComplete,
+    reviewVersion: approvals.reviewVersion,
   };
 }
 
+export function isApprovalRoundComplete(approvals: PlanApprovals) {
+  return approvals.items.length > 0 && approvals.items.every((item) => item.status !== "pending");
+}
+
 export function applyPlanDeadline(plan: Plan, approvals: PlanApprovals, now = new Date()): PlanApprovals {
-  if (!isPlanExpired(plan, now)) return { ...approvals, autoApproved: false, deadlineAt: plan.approvalDeadline };
+  const reviewVersion = plan.reviewVersion || approvals.reviewVersion || 1;
+  if (isApprovalRoundComplete(approvals) || !isPlanExpired(plan, now)) {
+    return { ...approvals, autoApproved: false, deadlineAt: plan.approvalDeadline, reviewVersion };
+  }
   return {
     ...approvals,
     items: approvals.items.map((item) => ({ ...item, status: "approved" as ApprovalStatus })),
     autoApproved: true,
     deadlineAt: plan.approvalDeadline,
+    reviewVersion,
   };
 }
 
@@ -471,6 +483,7 @@ export async function recordApproval(input: {
   comment: string;
   approverName?: string;
   reviewerId?: string;
+  reviewVersion?: number;
 }) {
   const approverName = input.approverName?.trim() || "Cliente";
   const reviewerId = input.reviewerId?.trim() || legacyReviewerId(approverName);
@@ -498,6 +511,7 @@ export async function recordApproval(input: {
       status: input.status,
       comment,
       updatedAt: now,
+      reviewVersion: input.reviewVersion,
     };
     if (responseIndex >= 0) responses[responseIndex] = nextResponse;
     else responses.push(nextResponse);
@@ -526,11 +540,12 @@ export async function recordApproval(input: {
       createdAt: now,
       approverName,
       reviewerId,
+      reviewVersion: input.reviewVersion,
     };
     const history = [...normalized.history, event];
 
     return {
-      approvals: { ...normalized, planSlug: input.slug, items, history, updatedAt: now },
+      approvals: { ...normalized, planSlug: input.slug, items, history, updatedAt: now, reviewVersion: input.reviewVersion || normalized.reviewVersion || 1 },
       event,
     };
   };
@@ -594,6 +609,8 @@ export async function savePlan(input: {
   kind?: PlanKind;
   approvalDeadline?: string;
   approvalPeriodDays?: number;
+  reviewVersion?: number;
+  versionUpdatedAt?: string;
 }) {
   const existing = await getPlan(input.slug);
   const now = new Date().toISOString();
@@ -607,6 +624,8 @@ export async function savePlan(input: {
     kind: input.kind || existing?.plan.kind || "approval",
     approvalDeadline: input.approvalDeadline ?? existing?.plan.approvalDeadline,
     approvalPeriodDays: input.approvalPeriodDays ?? existing?.plan.approvalPeriodDays,
+    reviewVersion: input.reviewVersion ?? existing?.plan.reviewVersion ?? 1,
+    versionUpdatedAt: input.versionUpdatedAt ?? existing?.plan.versionUpdatedAt ?? now,
   };
 
   if (usesVercelBlobs()) {
@@ -727,20 +746,62 @@ async function backupLocalHtml(slug: string, html: string) {
   }
 }
 
+async function reopenAdjustedItems(slug: string, reviewVersion: number) {
+  return mutatePlanApprovals(slug, (approvals) => {
+    const normalized = normalizeApprovals(approvals);
+    const adjusted = normalized.items.filter((item) => item.status === "changes_requested");
+    if (!adjusted.length) return null;
+    const now = new Date().toISOString();
+    const adjustedIds = new Set(adjusted.map((item) => item.id));
+    const items = normalized.items.map((item) => adjustedIds.has(item.id)
+      ? aggregateApprovalItem({ ...item, status: "pending", comment: "", approverName: undefined, updatedAt: now }, [])
+      : item);
+    const history: ApprovalEvent[] = [
+      ...normalized.history,
+      ...adjusted.map((item) => ({
+        id: randomUUID(),
+        itemId: item.id,
+        itemTitle: item.title,
+        action: "reopened" as const,
+        status: "pending" as const,
+        previousStatus: "changes_requested" as const,
+        comment: `Conteúdo reaberto para validação na versão ${reviewVersion}.`,
+        createdAt: now,
+        approverName: "Vizantu",
+        reviewerId: `system-version-${reviewVersion}`,
+        reviewVersion,
+      })),
+    ];
+    return { ...normalized, items, history, updatedAt: now, reviewVersion };
+  });
+}
+
 export async function updatePlanHtml(slug: string, html: string): Promise<Plan | null> {
   const existing = await getPlan(slug);
   if (!existing) return null;
+  const approvals = await getPlanApprovals(slug);
+  const currentVersion = existing.plan.reviewVersion || approvals.reviewVersion || 1;
+  const startsNewVersion = isApprovalRoundComplete(approvals) && approvals.items.some((item) => item.status === "changes_requested");
+  const nextVersion = startsNewVersion ? currentVersion + 1 : currentVersion;
+  const versionUpdatedAt = startsNewVersion ? new Date().toISOString() : existing.plan.versionUpdatedAt;
+  const approvalDeadline = startsNewVersion && existing.plan.approvalPeriodDays
+    ? approvalDeadlineFromDays(existing.plan.approvalPeriodDays)
+    : existing.plan.approvalDeadline;
   await backupLocalHtml(slug, existing.html);
-  return savePlan({
+  const plan = await savePlan({
     title: existing.plan.title,
     slug,
     originalName: existing.plan.originalName,
     html,
     size: Buffer.byteLength(html, "utf8"),
     kind: existing.plan.kind,
-    approvalDeadline: existing.plan.approvalDeadline,
+    approvalDeadline,
     approvalPeriodDays: existing.plan.approvalPeriodDays,
+    reviewVersion: nextVersion,
+    versionUpdatedAt,
   });
+  if (startsNewVersion) await reopenAdjustedItems(slug, nextVersion);
+  return plan;
 }
 
 export async function deletePlan(slug: string) {

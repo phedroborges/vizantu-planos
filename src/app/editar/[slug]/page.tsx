@@ -11,5 +11,5 @@ export default async function EditPlanPage({ params }: { params: Promise<{ slug:
   const [result, approvals] = await Promise.all([getPlan(slug), getPlanApprovals(slug)]);
   if (!result) notFound();
 
-  return <PlanEditor slug={slug} title={result.plan.title} html={result.html} initialApprovals={applyPlanDeadline(result.plan, approvals)} />;
+  return <PlanEditor slug={slug} title={result.plan.title} html={result.html} reviewVersion={result.plan.reviewVersion || 1} initialApprovals={applyPlanDeadline(result.plan, approvals)} />;
 }

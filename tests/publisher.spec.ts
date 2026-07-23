@@ -332,7 +332,7 @@ test("salva parecer por conteúdo e preserva o histórico", async ({ page }, tes
 
 test("encerra no prazo, aprova automaticamente e permite reabrir", async ({ page }, testInfo) => {
   const slug = `prazo-${testInfo.project.name}`;
-  const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Plano com prazo</title></head><body><main><h1>Campanha de prazo</h1><div class="approval" data-id="campanha-1" data-title="Campanha principal"></div></main></body></html>`;
+  const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Plano com prazo</title></head><body><main><h1>Campanha de prazo</h1><div class="approval" data-id="campanha-1" data-title="Campanha principal"></div><div class="approval" data-id="campanha-2" data-title="Campanha secundária"></div></main></body></html>`;
   const upload = await page.request.post("/api/plans", {
     multipart: {
       title: "Plano com prazo",
@@ -417,6 +417,98 @@ test("encerra no prazo, aprova automaticamente e permite reabrir", async ({ page
   }
 });
 
+test("conclui a rodada e cria novas versões após ajustes", async ({ page }, testInfo) => {
+  const slug = `versoes-${testInfo.project.name}`;
+  const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Plano versionado</title></head><body><main><h1>Versão inicial</h1><div class="approval" data-id="item-aprovado" data-title="Conteúdo aprovado"></div><div class="approval" data-id="item-ajuste" data-title="Conteúdo com ajuste"></div></main></body></html>`;
+  const upload = await page.request.post("/api/plans", {
+    multipart: {
+      title: "Plano versionado",
+      slug,
+      kind: "approval",
+      approvalDays: "7",
+      file: { name: "versoes.html", mimeType: "text/html", buffer: Buffer.from(html) },
+    },
+  });
+  expect(upload.status()).toBe(201);
+  expect((await upload.json()).plan.reviewVersion).toBe(1);
+
+  const record = (itemId: string, status: "pending" | "approved" | "changes_requested", comment = "") => page.request.post(`/api/plans/${slug}/approvals`, {
+    data: {
+      action: "record",
+      itemId,
+      itemTitle: itemId === "item-aprovado" ? "Conteúdo aprovado" : "Conteúdo com ajuste",
+      status,
+      comment,
+      approverName: "Cliente Versionado",
+      reviewerId: "cliente-versionado",
+    },
+  });
+
+  try {
+    await page.goto(`/${slug}`);
+    const frame = planFrame(page);
+    await identify(frame, "Cliente Versionado");
+    await expect(frame.locator(".approval")).toHaveCount(2);
+
+    expect((await record("item-aprovado", "approved")).status()).toBe(200);
+    expect((await record("item-ajuste", "approved")).status()).toBe(200);
+    await expect(page.locator("#vz-deadline-countdown")).toHaveText("APROVADO");
+    await expect(frame.locator('[data-id="item-aprovado"]')).toBeHidden();
+    await expect(frame.locator('[data-id="item-ajuste"]')).toBeHidden();
+
+    expect((await record("item-ajuste", "pending")).status()).toBe(200);
+    await expect(page.locator("#vz-deadline-countdown")).toContainText(/\d/);
+    await expect(frame.locator('[data-id="item-ajuste"]')).toBeVisible();
+
+    expect((await record("item-ajuste", "changes_requested", "Trocar a chamada principal.")).status()).toBe(200);
+    await expect(page.locator("#vz-review-heading")).toHaveText("Ajustes solicitados");
+    await expect(page.locator("#vz-deadline-countdown")).toHaveText("REVISÃO CONCLUÍDA");
+
+    const metadataPath = path.join(process.cwd(), ".data", "metadata", `${slug}.json`);
+    const metadata = JSON.parse(await readFile(metadataPath, "utf8"));
+    metadata.approvalDeadline = new Date(Date.now() - 60_000).toISOString();
+    await writeFile(metadataPath, JSON.stringify(metadata), "utf8");
+    const completedAfterDeadline = await page.request.get(`/api/plans/${slug}/approvals`);
+    const completedData = await completedAfterDeadline.json();
+    expect(completedData.summary).toMatchObject({ status: "changes_requested", roundComplete: true, autoApproved: false });
+
+    const version2Html = html.replace("Versão inicial", "Versão 2 atualizada");
+    const version2 = await page.request.put(`/api/plans/${slug}/html`, { data: { html: version2Html } });
+    expect(version2.status()).toBe(200);
+    const version2Plan = (await version2.json()).plan;
+    expect(version2Plan.reviewVersion).toBe(2);
+    expect(Date.parse(version2Plan.approvalDeadline)).toBeGreaterThan(Date.now());
+
+    let approvalsResponse = await page.request.get(`/api/plans/${slug}/approvals`);
+    let approvalsData = await approvalsResponse.json();
+    expect(approvalsData.approvals.reviewVersion).toBe(2);
+    expect(approvalsData.approvals.items.find((item: { id: string }) => item.id === "item-aprovado").status).toBe("approved");
+    expect(approvalsData.approvals.items.find((item: { id: string }) => item.id === "item-ajuste").status).toBe("pending");
+    expect(approvalsData.approvals.history.some((event: { action: string; reviewVersion: number }) => event.action === "reopened" && event.reviewVersion === 2)).toBe(true);
+
+    await page.goto(`/${slug}`);
+    const version2Frame = planFrame(page);
+    await expect(page.locator("#vz-review-detail")).toContainText("Versão 2");
+    await expect(version2Frame.locator('[data-id="item-aprovado"]')).toBeHidden();
+    await expect(version2Frame.locator('[data-id="item-ajuste"]')).toBeVisible();
+
+    expect((await record("item-ajuste", "approved")).status()).toBe(200);
+    await expect(page.locator("#vz-deadline-countdown")).toHaveText("APROVADO");
+    expect((await record("item-ajuste", "changes_requested", "Ajustar novamente.")).status()).toBe(200);
+    await expect(page.locator("#vz-review-heading")).toHaveText("Ajustes solicitados");
+
+    const version3 = await page.request.put(`/api/plans/${slug}/html`, { data: { html: version2Html.replace("Versão 2", "Versão 3") } });
+    expect(version3.status()).toBe(200);
+    expect((await version3.json()).plan.reviewVersion).toBe(3);
+    approvalsResponse = await page.request.get(`/api/plans/${slug}/approvals`);
+    approvalsData = await approvalsResponse.json();
+    expect(approvalsData.approvals.reviewVersion).toBe(3);
+    expect(approvalsData.approvals.items.find((item: { id: string }) => item.id === "item-ajuste").status).toBe("pending");
+  } finally {
+    await page.request.delete(`/api/plans/${slug}`);
+  }
+});
+
 test("mostra ajustes e histórico ao lado do editor", async ({ page }, testInfo) => {
   const slug = `editor-historico-${testInfo.project.name}`;
   const html = `<!doctype html>
@@ -468,8 +560,10 @@ test("mostra ajustes e histórico ao lado do editor", async ({ page }, testInfo)
     await frame.getByText("Texto original do roteiro.", { exact: true }).fill("Texto atualizado a partir do parecer.");
     await page.getByRole("button", { name: "Salvar alterações" }).click();
     await expect(page.getByRole("button", { name: "Salvo" })).toBeVisible();
+    await expect(page.getByText(/Versão 2 criada/)).toBeVisible();
 
     await page.goto(`/${slug}`);
+    await expect(page.locator("#vz-review-detail")).toContainText("Versão 2");
     await expect(planFrame(page).getByText("Texto atualizado a partir do parecer.", { exact: true })).toBeVisible();
   } finally {
     await page.request.delete(`/api/plans/${slug}`);
@@ -510,6 +604,9 @@ test("lembra a pessoa e preserva pareceres independentes no mesmo link", async (
     await identify(fernandoFrame, "Fernando");
     const fernandoBox = fernandoFrame.locator('[data-id="video-principal"]');
     await fernandoBox.locator(".vz-approve").click();
+    await expect(fernandoPage.locator("#vz-deadline-countdown")).toHaveText("APROVADO");
+    await expect(fernandoBox).toBeHidden();
+    await fernandoFrame.getByRole("button", { name: "Rever minha decisão" }).click();
     await expect(fernandoBox.locator(".vz-badge-approved")).toContainText("Conteúdo aprovado");
     await expect(fernandoBox.locator(".vz-badge-approved")).toContainText("Fernando");
 
