@@ -11,6 +11,7 @@ const MAX_FILE_SIZE = 4 * 1024 * 1024;
 
 const inputSchema = z.object({
   title: z.string().trim().min(3).max(120),
+  client: z.string().trim().max(120).optional(),
   slug: z.string().trim().min(3).max(80),
   kind: z.enum(["approval", "presentation"]).default("approval"),
   approvalDays: z.coerce.number().int().min(1).max(3650).default(7),
@@ -21,6 +22,7 @@ export async function POST(request: Request) {
     const formData = await request.formData();
     const parsed = inputSchema.safeParse({
       title: String(formData.get("title") || ""),
+      client: String(formData.get("client") || ""),
       slug: String(formData.get("slug") || ""),
       kind: String(formData.get("kind") || "approval"),
       approvalDays: String(formData.get("approvalDays") || "7"),
@@ -39,6 +41,7 @@ export async function POST(request: Request) {
 
     const plan = await savePlan({
       title: parsed.data.title,
+      client: parsed.data.client,
       slug,
       originalName: prepared.originalName,
       html: prepared.html,

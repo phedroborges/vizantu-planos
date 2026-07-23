@@ -461,6 +461,39 @@ export async function listApprovalSummaries(plans: Plan[]) {
   return Object.fromEntries(entries) as Record<string, ApprovalSummary>;
 }
 
+export async function recordPlanView(input: {
+  slug: string;
+  reviewerId: string;
+  name: string;
+}) {
+  return mutatePlanApprovals(input.slug, (approvals) => {
+    const name = input.name.trim();
+    if (!name || name === "Vizantu") return null;
+    const now = new Date().toISOString();
+    const viewers = [...(approvals.viewers || [])];
+    const index = viewers.findIndex((viewer) => viewer.reviewerId === input.reviewerId);
+
+    if (index >= 0) {
+      viewers[index] = {
+        ...viewers[index],
+        name,
+        lastViewedAt: now,
+        viewCount: viewers[index].viewCount + 1,
+      };
+    } else {
+      viewers.push({
+        reviewerId: input.reviewerId,
+        name,
+        firstViewedAt: now,
+        lastViewedAt: now,
+        viewCount: 1,
+      });
+    }
+
+    return { ...approvals, viewers, updatedAt: now };
+  });
+}
+
 export async function syncApprovalItems(slug: string, items: Array<Pick<ApprovalItem, "id" | "title">>) {
   return mutatePlanApprovals(slug, (approvals) => {
     const current = new Map(normalizeApprovals(approvals).items.map((item) => [item.id, item]));
@@ -602,6 +635,7 @@ export async function getPlan(slug: string): Promise<PlanWithHtml | null> {
 
 export async function savePlan(input: {
   title: string;
+  client?: string;
   slug: string;
   originalName: string;
   html: string;
@@ -617,6 +651,7 @@ export async function savePlan(input: {
   const plan: Plan = {
     slug: input.slug,
     title: input.title,
+    client: input.client?.trim() || existing?.plan.client,
     originalName: input.originalName,
     size: input.size,
     createdAt: existing?.plan.createdAt || now,
@@ -790,6 +825,7 @@ export async function updatePlanHtml(slug: string, html: string): Promise<Plan |
   await backupLocalHtml(slug, existing.html);
   const plan = await savePlan({
     title: existing.plan.title,
+    client: existing.plan.client,
     slug,
     originalName: existing.plan.originalName,
     html,

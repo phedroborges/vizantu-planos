@@ -107,10 +107,87 @@ test("sincroniza duas telas e preserva comentário ainda não enviado", async ({
   }
 });
 
+test("resume dados no dashboard e abre a visão geral pelo calendário", async ({ page }, testInfo) => {
+  const slug = `dashboard-${testInfo.project.name}`;
+  const title = `Campanha Analytics ${testInfo.project.name}`;
+  const client = `Cliente Analytics ${testInfo.project.name}`;
+  const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>${title}</title></head><body><main><div class="approval" data-id="copy" data-title="Texto principal"></div><div class="approval" data-id="visual" data-title="Imagem principal"></div></main></body></html>`;
+  const upload = await page.request.post("/api/plans", {
+    multipart: {
+      title,
+      client,
+      slug,
+      approvalDays: "7",
+      file: { name: "analytics.html", mimeType: "text/html", buffer: Buffer.from(html) },
+    },
+  });
+  expect(upload.status()).toBe(201);
+
+  try {
+    const approve = await page.request.post(`/api/plans/${slug}/approvals`, {
+      data: { action: "record", itemId: "copy", itemTitle: "Texto principal", status: "approved", comment: "", approverName: "Ana", reviewerId: "ana-dashboard" },
+    });
+    const adjust = await page.request.post(`/api/plans/${slug}/approvals`, {
+      data: { action: "record", itemId: "visual", itemTitle: "Imagem principal", status: "changes_requested", comment: "Trocar a imagem e ajustar a cor da arte.", approverName: "Bruno", reviewerId: "bruno-dashboard" },
+    });
+    expect(approve.ok()).toBeTruthy();
+    expect(adjust.ok()).toBeTruthy();
+
+    await page.goto(`/${slug}`);
+    await identify(planFrame(page), "Carla");
+    await expect.poll(async () => {
+      const response = await page.request.get(`/api/plans/${slug}/approvals`);
+      const data = await response.json();
+      return data.approvals.viewers?.some((viewer: { name: string }) => viewer.name === "Carla") || false;
+    }).toBe(true);
+
+    await page.goto("/");
+    await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
+    await expect(page.locator(".metric-card")).toHaveCount(4);
+    const projectRow = page.locator(".project-table tbody tr", { hasText: title });
+    await expect(projectRow).toContainText(client);
+    await expect(projectRow).toContainText("Ana");
+    await expect(projectRow).toContainText("Bruno");
+    await expect(projectRow).toContainText("50%");
+    await expect(projectRow).toContainText("Com ajustes");
+    await expect(page.locator(".adjustment-insights")).toContainText("Visual e identidade");
+    await expect(page.locator(".adjustment-insights")).toContainText("Trocar a imagem e ajustar a cor da arte.");
+    await expect(page.locator(".calendar-panel")).toHaveCount(0);
+    await expect(page.locator("[data-nextjs-dialog]")).toHaveCount(0);
+
+    if (testInfo.project.name === "mobile") {
+      await page.getByRole("button", { name: "Abrir menu" }).click();
+      await expect(page.locator(".admin-sidebar")).toHaveClass(/open/);
+      await page.getByRole("button", { name: "Fechar menu" }).last().click();
+    }
+
+    await page.goto("/calendario");
+    await expect(page.getByRole("heading", { name: "Calendário" })).toBeVisible();
+    const calendarCard = page.locator(".calendar-project-card", { hasText: title });
+    await expect(calendarCard).toContainText(client);
+    await calendarCard.click();
+    const overview = page.getByRole("dialog", { name: title });
+    await expect(overview).toBeVisible();
+    await expect(overview).toContainText("2");
+    await expect(overview).toContainText("50% de aprovação");
+    await expect(overview).toContainText("Carla");
+    await expect(overview).toContainText("1 visita");
+    await expect(overview).toContainText("Ana");
+    await expect(overview).toContainText("Bruno");
+    await overview.getByRole("button", { name: "Fechar visão geral" }).click();
+    await expect(overview).toHaveCount(0);
+
+    const dimensions = await page.evaluate(() => ({ client: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth }));
+    expect(dimensions.scroll).toBeLessThanOrEqual(dimensions.client + 1);
+  } finally {
+    await page.request.delete(`/api/plans/${slug}`);
+  }
+});
+
 test("publica, abre e exclui um HTML", async ({ page, context }, testInfo) => {
   const slug = `teste-${testInfo.project.name}`;
 
-  await page.goto("/");
+  await page.goto("/planos");
   await expect(page.getByRole("heading", { name: "Planos publicados" })).toBeVisible();
   await expect(page.locator("[data-nextjs-dialog]")).toHaveCount(0);
 

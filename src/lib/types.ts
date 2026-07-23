@@ -3,6 +3,7 @@ export type PlanKind = "approval" | "presentation";
 export type Plan = {
   slug: string;
   title: string;
+  client?: string;
   originalName: string;
   size: number;
   createdAt: string;
@@ -56,10 +57,19 @@ export type ApprovalEvent = {
   reviewVersion?: number;
 };
 
+export type PlanViewer = {
+  reviewerId: string;
+  name: string;
+  firstViewedAt: string;
+  lastViewedAt: string;
+  viewCount: number;
+};
+
 export type PlanApprovals = {
   planSlug: string;
   items: ApprovalItem[];
   history: ApprovalEvent[];
+  viewers?: PlanViewer[];
   updatedAt?: string;
   eventIds?: string[];
   autoApproved?: boolean;

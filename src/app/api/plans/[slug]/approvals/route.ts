@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { isAllowedSlug } from "@/lib/slug";
-import { applyPlanDeadline, getPlan, getPlanApprovals, recordApproval, summarizeApprovals, syncApprovalItems } from "@/lib/storage";
+import { applyPlanDeadline, getPlan, getPlanApprovals, recordApproval, recordPlanView, summarizeApprovals, syncApprovalItems } from "@/lib/storage";
 
 export const runtime = "nodejs";
 
@@ -20,6 +20,11 @@ const payloadSchema = z.discriminatedUnion("action", [
     comment: z.string().max(2000).default(""),
     approverName: z.string().trim().max(120).optional(),
     reviewerId: z.string().trim().min(1).max(120).regex(/^[a-zA-Z0-9_-]+$/).optional(),
+  }),
+  z.object({
+    action: z.literal("view"),
+    approverName: z.string().trim().min(2).max(120),
+    reviewerId: z.string().trim().min(1).max(120).regex(/^[a-zA-Z0-9_-]+$/),
   }),
 ]);
 
@@ -58,6 +63,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     if (!result) return json({ error: "Plano não encontrado." }, { status: 404 });
     const storedApprovals = await getPlanApprovals(slug);
     const effectiveApprovals = applyPlanDeadline(result.plan, storedApprovals);
+    if (parsed.data.action === "view") {
+      const stored = await recordPlanView({
+        slug,
+        reviewerId: parsed.data.reviewerId,
+        name: parsed.data.approverName,
+      });
+      const approvals = applyPlanDeadline(result.plan, stored);
+      return json({ approvals, summary: summarizeApprovals(approvals) });
+    }
     if (effectiveApprovals.autoApproved) {
       const approvals = effectiveApprovals;
       return json({

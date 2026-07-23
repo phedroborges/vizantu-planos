@@ -19,6 +19,7 @@ function reviewerHostScript(slug: string, deadlineAt: string | undefined, review
     var activeKey="vizantu-reviewer-active:v1";
     var memoryProfiles=[];
     var memoryActive="";
+    var viewedReviewerId="";
     var deadlineAt=${JSON.stringify(deadlineAt || "")};
     var deadlineLabel=${JSON.stringify(deadlineAt ? formatApprovalDeadline(deadlineAt) : "")};
     var reviewVersion=${reviewVersion};
@@ -55,9 +56,20 @@ function reviewerHostScript(slug: string, deadlineAt: string | undefined, review
       var active=profiles.find(function(profile){return profile.id===activeId;})||null;
       return {profiles:profiles,active:active};
     }
+    function recordView(profile){
+      if(!profile||profile.id===viewedReviewerId)return;
+      viewedReviewerId=profile.id;
+      fetch("/api/plans/"+encodeURIComponent(slug)+"/approvals",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({action:"view",reviewerId:profile.id,approverName:profile.name}),
+        keepalive:true
+      }).catch(function(){viewedReviewerId="";});
+    }
     function send(){
       if(!frame||!frame.contentWindow)return;
       var current=state();
+      recordView(current.active);
       frame.contentWindow.postMessage({type:"vizantu:identity:state",slug:slug,active:current.active,profiles:current.profiles,deadlineAt:deadlineAt,deadlineLabel:deadlineLabel,reviewVersion:reviewVersion,reviewStatus:reviewStatus},"*");
     }
     function saveName(name){
@@ -182,7 +194,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ slug: stri
   return new Response(html, {
     headers: {
       "Content-Type": "text/html; charset=utf-8",
-      "Content-Security-Policy": `default-src 'none'; frame-src 'self'; script-src 'nonce-${nonce}'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'`,
+      "Content-Security-Policy": `default-src 'none'; frame-src 'self'; connect-src 'self'; script-src 'nonce-${nonce}'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'`,
       "Cache-Control": "no-store, max-age=0",
       "Referrer-Policy": "strict-origin-when-cross-origin",
       "X-Content-Type-Options": "nosniff",

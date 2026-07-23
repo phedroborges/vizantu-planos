@@ -15,6 +15,7 @@ import {
   UploadCloud,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { planClientName } from "@/lib/plan-client";
 import { toSlug } from "@/lib/slug";
 import type { ApprovalSummary, Plan, PlanKind } from "@/lib/types";
 
@@ -77,6 +78,7 @@ export function Dashboard({
   const [plans, setPlans] = useState(initialPlans);
   const [summaries, setSummaries] = useState(initialSummaries);
   const [title, setTitle] = useState("");
+  const [client, setClient] = useState("");
   const [slug, setSlug] = useState("");
   const [kind, setKind] = useState<PlanKind>("approval");
   const [approvalDays, setApprovalDays] = useState(7);
@@ -98,7 +100,7 @@ export function Dashboard({
   const visiblePlans = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     if (!normalized) return plans;
-    return plans.filter((plan) => `${plan.title} ${plan.slug}`.toLowerCase().includes(normalized));
+    return plans.filter((plan) => `${plan.title} ${plan.slug} ${planClientName(plan)}`.toLowerCase().includes(normalized));
   }, [plans, query]);
 
   function showToast(message: string) {
@@ -129,6 +131,7 @@ export function Dashboard({
     setIsUploading(true);
     const body = new FormData();
     body.set("title", title);
+    body.set("client", client);
     body.set("slug", slug);
     body.set("kind", kind);
     if (kind === "approval") body.set("approvalDays", String(approvalDays));
@@ -144,6 +147,7 @@ export function Dashboard({
     const summaryResult = summaryResponse.ok ? await summaryResponse.json() : null;
     setSummaries((current) => ({ ...current, [result.plan.slug]: summaryResult?.summary || current[result.plan.slug] || emptySummary }));
     setTitle("");
+    setClient("");
     setSlug("");
     setSlugTouched(false);
     setFile(null);
@@ -213,24 +217,20 @@ export function Dashboard({
 
   return (
     <>
-      <header className="topbar">
-        <div className="app-shell topbar-inner">
-          <div className="brand"><img className="brand-logo" src="/brand/vizantu-white.svg" alt="Vizantu" /><span>Planos<small>Publicador de apresentações</small></span></div>
-        </div>
-      </header>
-      <main className="app-shell dashboard">
+      <main className="admin-page dashboard">
         <div className="dashboard-head">
-          <div><span className="eyebrow">Biblioteca de aprovações</span><h1>Planos publicados</h1><p>Envie um HTML ou projeto ZIP, acompanhe o parecer do cliente e mantenha o histórico de cada conteúdo.</p></div>
+          <div><span className="eyebrow">Operação</span><h1>Planos publicados</h1><p>O envio continua direto: informe os dados essenciais, escolha o arquivo e publique.</p></div>
           <div className="stats">
             <div className="stat"><strong>{plans.length}</strong><span>planos ativos</span></div>
             <div className="stat"><strong>{plans.reduce((sum, plan) => sum + plan.size, 0) ? formatBytes(plans.reduce((sum, plan) => sum + plan.size, 0)) : "0 KB"}</strong><span>armazenados</span></div>
           </div>
         </div>
         <div className="workspace">
-          <section className="panel upload-panel">
+          <section className="panel upload-panel" id="novo-plano">
             <div className="panel-head"><h2>Publicar novo plano</h2><p>O mesmo endereço será atualizado quando você reutilizar um slug.</p></div>
             {storageError ? <div className="storage-notice">{storageError}</div> : null}
             <form className="upload-form" onSubmit={upload}>
+              <div className="field"><label htmlFor="client">Cliente</label><input id="client" value={client} onChange={(event) => setClient(event.target.value)} placeholder="Ex.: TerraNet" maxLength={120} disabled={storageDisabled} /><span className="slug-preview">Opcional. Se ficar vazio, identificamos pelo título quando possível.</span></div>
               <div className="field"><label htmlFor="title">Título</label><input id="title" value={title} onChange={(event) => updateTitle(event.target.value)} placeholder="Plano de julho · TerraNet" required maxLength={120} disabled={storageDisabled} /></div>
               <div className="field"><label htmlFor="slug">Endereço</label><input id="slug" value={slug} onChange={(event) => { setSlugTouched(true); setSlug(toSlug(event.target.value)); }} placeholder="plano-julho-terranet" required maxLength={80} disabled={storageDisabled} /><span className="slug-preview">{siteUrl || "meusite.com"}/{slug || "seu-endereco"}</span></div>
               <div className="field">
@@ -267,7 +267,7 @@ export function Dashboard({
                   const approval = approvalPresentation(summary);
                   return (
                     <li className="plan-row" key={plan.slug}>
-                      <div className="plan-title"><a href={`/${plan.slug}`} target="_blank" rel="noreferrer">{plan.title}</a><div className="plan-url">/{plan.slug}</div></div>
+                      <div className="plan-title"><span className="plan-client">{planClientName(plan)}</span><a href={`/${plan.slug}`} target="_blank" rel="noreferrer">{plan.title}</a><div className="plan-url">/{plan.slug}</div></div>
                       <div className="plan-meta">
                         {isPresentation
                           ? <><span className="status presentation"><Presentation size={11} /> Apresentação</span><br />Sem fluxo de aprovação</>
