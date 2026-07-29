@@ -557,3 +557,71 @@ h1 { margin-bottom: 10px; font-size: clamp(34px, 5vw, 56px); line-height: 1.02; 
 @media (max-width: 900px) {
   .editor-review-panel { position: absolute; z-index: 5; inset: 0 0 0 auto; width: min(380px, 100%); box-shadow: -18px 0 42px rgba(20,16,28,.2); }
 }
+
+/* ============================================================
+   Linha do tempo das versões (editor + acompanhamento)
+   ============================================================ */
+.vz-versions { display: flex; flex-direction: column; gap: 12px; }
+.vz-version-rail { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.vz-version-rail-label { display: inline-flex; align-items: center; gap: 5px; margin-right: 4px; color: var(--muted); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+.vz-version-pill { min-width: 34px; padding: 5px 10px; border: 1px solid var(--line); border-radius: 999px; background: #fff; color: var(--muted); font-size: 12px; font-weight: 750; cursor: pointer; transition: border-color .12s, background .12s, color .12s; }
+.vz-version-pill:hover { border-color: #b7bdb6; color: var(--foreground); }
+.vz-version-pill.active { border-color: var(--accent); background: #f2ecfe; color: var(--accent-strong); }
+.vz-version-pill.is-current { box-shadow: inset 0 0 0 1px var(--accent); }
+
+.vz-version-cards { display: flex; flex-direction: column; gap: 10px; }
+.vz-version-card { border: 1px solid var(--line); border-radius: 10px; background: #fff; overflow: hidden; }
+.vz-version-card.current { border-color: #cdbcf6; box-shadow: 0 0 0 1px #e7defb; }
+.vz-version-card-head { width: 100%; display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 0; background: transparent; text-align: left; cursor: pointer; }
+.vz-version-card-head:hover { background: #fafbf9; }
+.vz-version-tag { flex: none; display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px; border-radius: 7px; background: #f0f2ee; color: var(--foreground); font-size: 12px; font-weight: 800; letter-spacing: .02em; }
+.vz-version-card.current .vz-version-tag { background: #efe6ff; color: var(--accent-strong); }
+.vz-version-tag em { font-style: normal; font-size: 8px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; color: var(--accent-strong); }
+.vz-version-headline { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.vz-version-headline strong { font-size: 12px; font-weight: 700; line-height: 1.25; }
+.vz-version-headline small { color: var(--muted); font-size: 10px; }
+.vz-version-mini { flex: none; display: inline-flex; align-items: center; gap: 6px; }
+.vz-mini { display: inline-flex; align-items: center; gap: 3px; padding: 3px 7px; border-radius: 999px; font-size: 11px; font-weight: 750; font-variant-numeric: tabular-nums; }
+.vz-mini svg { width: 11px; height: 11px; }
+.vz-mini.approved { background: #eff8dd; color: #527613; }
+.vz-mini.changes_requested { background: #fff0eb; color: #a63d1e; }
+.vz-mini.rejected { background: #fdeceb; color: #a02a24; }
+.vz-mini.pending { background: #f0f2ee; color: #697069; }
+.vz-version-chevron { flex: none; color: var(--muted); transition: transform .18s ease; }
+.vz-version-card.open .vz-version-chevron { transform: rotate(180deg); }
+
+.vz-version-items { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+.vz-version-items > li { border-bottom: 1px solid #eef0ec; }
+.vz-version-items > li:last-child { border-bottom: 0; }
+.vz-version-item { width: 100%; display: grid; grid-template-columns: 1fr auto; align-items: start; gap: 6px 10px; padding: 11px 14px; border: 0; background: transparent; color: var(--foreground); text-align: left; font: inherit; }
+button.vz-version-item { cursor: pointer; }
+button.vz-version-item:hover { background: #fafbf9; }
+.vz-version-item-title { min-width: 0; font-size: 12px; font-weight: 650; line-height: 1.35; }
+.vz-outcome { flex: none; display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 999px; font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; }
+.vz-outcome svg { width: 11px; height: 11px; }
+.vz-outcome.approved { background: #eff8dd; color: #527613; }
+.vz-outcome.changes_requested { background: #fff0eb; color: #a63d1e; }
+.vz-outcome.rejected { background: #fdeceb; color: #a02a24; }
+.vz-outcome.pending { background: #f0f2ee; color: #697069; }
+.vz-version-item-comment { grid-column: 1 / -1; margin: 2px 0 0; padding: 7px 9px; border-left: 2px solid #e56a3c; background: #fff3ed; color: #56372b; font-size: 11px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: break-word; }
+.vz-version-item-meta { grid-column: 1 / -1; color: #858d85; font-size: 9px; }
+.vz-version-item-meta strong { color: var(--muted); font-weight: 700; }
+.vz-version-empty { padding: 14px; color: var(--muted); font-size: 11px; text-align: center; }
+
+/* Variante compacta (barra lateral do editor) */
+.vz-versions.compact .vz-version-card-head { flex-wrap: wrap; gap: 8px 10px; }
+.vz-versions.compact .vz-version-headline { flex-basis: 100%; order: 3; }
+.vz-versions.compact .vz-version-mini { margin-left: auto; }
+.editor-versions-wrap { padding: 14px 16px 18px; }
+
+/* Seção de versões no acompanhamento */
+.review-versions-section { margin-bottom: 28px; }
+.review-versions-body { padding: 20px 22px 24px; }
+.review-versions-section .section-title h2 { display: flex; align-items: center; gap: 8px; }
+.review-versions-section .section-title h2 svg { color: var(--accent-strong); }
+@media (max-width: 560px) {
+  .vz-version-card-head { flex-wrap: wrap; gap: 8px 10px; }
+  .vz-version-headline { flex-basis: 100%; order: 3; }
+  .vz-version-mini { margin-left: auto; }
+  .review-versions-body { padding: 16px; }
+}

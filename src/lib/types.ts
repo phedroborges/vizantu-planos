@@ -22,7 +22,10 @@ export type PlanWithHtml = {
   html: string;
 };
 
-export type ApprovalStatus = "pending" | "approved" | "changes_requested";
+// "rejected" (Reprovado) é um estado terminal: o conteúdo é descartado e não volta
+// nas próximas versões. A UI de reprovação é habilitada em etapa própria; por ora
+// nenhum fluxo grava esse status, mas o modelo e a linha do tempo já o reconhecem.
+export type ApprovalStatus = "pending" | "approved" | "changes_requested" | "rejected";
 
 export type ApprovalResponse = {
   reviewerId: string;
