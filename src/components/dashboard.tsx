@@ -23,6 +23,7 @@ const emptySummary: ApprovalSummary = {
   total: 0,
   approved: 0,
   changesRequested: 0,
+  rejected: 0,
   pending: 0,
   status: "not_started",
 };
@@ -55,8 +56,9 @@ function formatDeadline(value?: string) {
 }
 
 function approvalPresentation(summary: ApprovalSummary) {
+  const rejectedNote = summary.rejected ? ` · ${summary.rejected} reprovado${summary.rejected === 1 ? "" : "s"}` : "";
   if (summary.autoApproved) return { label: "Plano aprovado", tone: "approved", detail: "Aprovação automática" };
-  if (summary.status === "approved") return { label: "Plano aprovado", tone: "approved", detail: `${summary.approved}/${summary.total} aprovados` };
+  if (summary.status === "approved") return { label: summary.rejected ? "Plano concluído" : "Plano aprovado", tone: "approved", detail: `${summary.approved}/${summary.total} aprovados${rejectedNote}` };
   if (summary.status === "changes_requested" && summary.roundComplete) return { label: "Plano com ajustes", tone: "adjustments", detail: `${summary.changesRequested} ${summary.changesRequested === 1 ? "ajuste" : "ajustes"}` };
   if (summary.status === "changes_requested") return { label: "Em revisão", tone: "review", detail: `${summary.pending} aguardando · ${summary.changesRequested} com ajuste` };
   if (summary.status === "in_review") return { label: "Em revisão", tone: "review", detail: `${summary.approved}/${summary.total} aprovados` };

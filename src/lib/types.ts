@@ -50,7 +50,7 @@ export type ApprovalEvent = {
   id: string;
   itemId: string;
   itemTitle: string;
-  action: "approved" | "changes_requested" | "commented" | "reopened";
+  action: "approved" | "changes_requested" | "rejected" | "commented" | "reopened";
   status: ApprovalStatus;
   previousStatus: ApprovalStatus;
   comment: string;
@@ -84,6 +84,7 @@ export type ApprovalSummary = {
   total: number;
   approved: number;
   changesRequested: number;
+  rejected: number;
   pending: number;
   status: "not_started" | "pending" | "in_review" | "approved" | "changes_requested";
   updatedAt?: string;

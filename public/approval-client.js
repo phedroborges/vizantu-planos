@@ -96,6 +96,8 @@
   }
 
   var CHECK_SVG = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path class="vz-check-path" d="M4 12.5 9.5 18 20 6.5"/></svg>';
+  var X_SVG = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+  var PENCIL_SVG = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L18.5 9.5a2 2 0 0 0-2.8-2.8L4.9 17.2 4 20z"/></svg>';
 
   function addStyles() {
     var style = document.createElement("style");
@@ -116,11 +118,18 @@
       ".vz-ui{font-family:Arial,sans-serif;color:#18201a}",
       ".vz-ui [hidden]{display:none!important}",
       ".vz-choice{display:flex;gap:10px}",
-      ".vz-approve,.vz-request{display:inline-flex;align-items:center;gap:8px;min-height:40px;padding:9px 18px;border-radius:5px;cursor:pointer;font:650 13px Arial,sans-serif;transition:transform .12s ease,box-shadow .12s ease}",
+      ".vz-approve,.vz-request,.vz-reject{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:40px;padding:9px 16px;border-radius:5px;cursor:pointer;font:650 13px Arial,sans-serif;transition:transform .12s ease,box-shadow .12s ease,border-color .12s ease,color .12s ease}",
       ".vz-approve{border:1px solid #2f5f3c;background:#2f5f3c;color:#fff}",
       ".vz-approve:hover{box-shadow:0 4px 14px rgba(47,95,60,.35);transform:translateY(-1px)}",
       ".vz-request{border:1px solid #cbd2cc;background:#f7f8f6;color:#18201a}",
       ".vz-request:hover{border-color:#d65d32;color:#a63d1e}",
+      ".vz-request svg{color:#8a5a2b}",
+      ".vz-reject{border:1px solid #e3c4bf;background:#fff;color:#a02a24}",
+      ".vz-reject:hover{border-color:#bc342c;background:#fdeceb}",
+      ".vz-edit-reject textarea{border-color:#bc342c}",
+      ".vz-edit-reject textarea:focus{outline-color:rgba(188,52,44,.22)}",
+      ".vz-edit-reject .vz-edit-hint{color:#a02a24}",
+      ".vz-edit-reject .vz-send{background:#bc342c;border-color:#bc342c}",
       ".vz-edit textarea{box-sizing:border-box;display:block;width:100%;min-height:96px;padding:12px;border:1px solid #d65d32;border-radius:5px;background:#fff;color:#18201a;resize:vertical;font:400 13px/1.5 Arial,sans-serif}",
       ".vz-edit textarea:focus{outline:2px solid rgba(214,93,50,.25)}",
       ".vz-edit-hint{margin:8px 0 10px;font:500 11px/1.5 Arial,sans-serif;color:#8a5a2b}",
@@ -132,9 +141,12 @@
       ".vz-badge{display:flex;align-items:flex-start;gap:12px;padding:14px 16px;border-radius:6px}",
       ".vz-badge-approved{background:#eef7e4;border:1px solid #bcd98f}",
       ".vz-badge-changes{background:#fdf0ea;border:1px solid #edbfa8}",
+      ".vz-badge-rejected{background:#fdeceb;border:1px solid #f0c0bb}",
       ".vz-badge-icon{flex:none;display:grid;place-items:center;width:34px;height:34px;border-radius:50%;color:#fff}",
       ".vz-badge-approved .vz-badge-icon{background:#2f5f3c}",
       ".vz-badge-changes .vz-badge-icon{background:#d65d32;font:700 15px Arial,sans-serif}",
+      ".vz-badge-rejected .vz-badge-icon{background:#bc342c}",
+      ".vz-badge-rejected strong{color:#a02a24}",
       ".vz-badge-body{flex:1;min-width:0}",
       ".vz-badge-body strong{display:block;font:700 14px/1.3 Arial,sans-serif}",
       ".vz-badge-approved strong{color:#2c5237}",
@@ -182,7 +194,7 @@
       ".vz-response strong{display:inline!important;font-size:11px!important}",
       ".vz-response p{margin:5px 0 0;white-space:pre-wrap}",
       ".vz-my-review{margin-top:10px;padding:10px 12px;border:1px solid #d8dcd7;border-radius:5px;background:#f7f8f6;font:600 11px/1.45 Arial,sans-serif;color:#4c554d}",
-      "@media(max-width:640px){.vz-generated-approval{padding:16px}.vz-generated-head{display:block}.vz-generated-head strong{display:block;margin-top:6px;text-align:left}.vz-choice{display:grid;grid-template-columns:1fr 1fr}.vz-badge{flex-wrap:wrap}.vz-badge-links{flex-direction:row;width:100%;justify-content:flex-end}.vz-gate-card{padding:24px 20px}.vz-identity{right:10px;bottom:10px}}"
+      "@media(max-width:640px){.vz-generated-approval{padding:16px}.vz-generated-head{display:block}.vz-generated-head strong{display:block;margin-top:6px;text-align:left}.vz-choice{display:grid;grid-template-columns:1fr 1fr}.vz-choice .vz-approve{grid-column:1/-1}.vz-badge{flex-wrap:wrap}.vz-badge-links{flex-direction:row;width:100%;justify-content:flex-end}.vz-gate-card{padding:24px 20px}.vz-identity{right:10px;bottom:10px}}"
     ].join("");
     document.head.appendChild(style);
   }
@@ -230,10 +242,11 @@
     ui.innerHTML =
       '<div class="vz-choice">' +
         '<button type="button" class="vz-approve">' + CHECK_SVG + ' Aprovar</button>' +
-        '<button type="button" class="vz-request">Pedir ajuste</button>' +
+        '<button type="button" class="vz-request">' + PENCIL_SVG + ' Pedir ajuste</button>' +
+        '<button type="button" class="vz-reject">' + X_SVG + ' Reprovar</button>' +
       '</div>' +
       '<div class="vz-edit" hidden>' +
-        '<textarea aria-label="Descreva o ajuste" placeholder="Descreva aqui o que você quer ajustar neste conteúdo…"></textarea>' +
+        '<textarea aria-label="Comentário" placeholder="Descreva aqui o que você quer ajustar neste conteúdo…"></textarea>' +
         '<p class="vz-edit-hint">Escreva o que precisa mudar e confirme. O pedido de ajuste só é enviado depois que você escrever.</p>' +
         '<div class="vz-edit-actions">' +
           '<button type="button" class="vz-send" disabled>Enviar pedido de ajuste</button>' +
@@ -355,20 +368,34 @@
     verdict.hidden = item.status === "pending" && personalMode === "choice";
 
     if (personalMode === "edit") {
+      var mode = editing[id] === "reject" ? "reject" : "adjust";
       var textarea = edit.querySelector("textarea");
-      if (textarea && !dirty[id] && document.activeElement !== textarea) textarea.value = own.comment || "";
+      var hint = edit.querySelector(".vz-edit-hint");
       var send = edit.querySelector(".vz-send");
+      edit.classList.toggle("vz-edit-reject", mode === "reject");
+      if (textarea) textarea.placeholder = mode === "reject"
+        ? "Explique por que está reprovando este conteúdo…"
+        : "Descreva aqui o que você quer ajustar neste conteúdo…";
+      if (hint) hint.textContent = mode === "reject"
+        ? "A reprovação descarta este conteúdo — ele não volta nas próximas versões. Diga o motivo para a equipe entender."
+        : "Escreva o que precisa mudar e confirme. O pedido de ajuste só é enviado depois que você escrever.";
+      if (send) send.textContent = mode === "reject" ? "Confirmar reprovação" : "Enviar pedido de ajuste";
+      if (textarea && !dirty[id] && document.activeElement !== textarea) textarea.value = own.comment || "";
       if (send && textarea) send.disabled = !textarea.value.trim();
     }
 
     var links = own.status === "changes_requested"
       ? '<div class="vz-badge-links"><button type="button" class="vz-link vz-edit-request">Editar meu pedido</button><button type="button" class="vz-link vz-undo">Desfazer meu parecer</button></div>'
-      : own.status === "approved"
-        ? '<div class="vz-badge-links"><button type="button" class="vz-link vz-undo">Desfazer minha aprovação</button></div>'
-        : "";
+      : own.status === "rejected"
+        ? '<div class="vz-badge-links"><button type="button" class="vz-link vz-edit-request">Editar o motivo</button><button type="button" class="vz-link vz-undo">Desfazer minha reprovação</button></div>'
+        : own.status === "approved"
+          ? '<div class="vz-badge-links"><button type="button" class="vz-link vz-undo">Desfazer minha aprovação</button></div>'
+          : "";
     var myReview = own.status === "changes_requested"
       ? '<div class="vz-my-review">Seu parecer: ajuste solicitado' + (own.comment ? '<p class="vz-badge-comment">' + escapeHtml(own.comment) + '</p>' : "") + '</div>'
-      : own.status === "approved" ? '<div class="vz-my-review">Seu parecer: aprovado</div>' : "";
+      : own.status === "rejected"
+        ? '<div class="vz-my-review">Seu parecer: reprovado' + (own.comment ? '<p class="vz-badge-comment">' + escapeHtml(own.comment) + '</p>' : "") + '</div>'
+        : own.status === "approved" ? '<div class="vz-my-review">Seu parecer: aprovado</div>' : "";
 
     if (item.status === "approved") {
       var approvedResponses = responses.filter(function (response) { return response.status === "approved"; });
@@ -389,6 +416,14 @@
           '<div class="vz-badge-body"><strong>Ajuste solicitado</strong><small>' + requested.length + (requested.length === 1 ? " pessoa pediu alteração" : " pessoas pediram alterações") + '</small>' +
             responseList(requested) + myReview + '</div>' + links +
         '</div>';
+    } else if (item.status === "rejected") {
+      var rejectedResponses = responses.filter(function (response) { return response.status === "rejected"; });
+      verdict.innerHTML =
+        '<div class="vz-badge vz-badge-rejected' + (animate ? " vz-anim" : "") + '">' +
+          '<span class="vz-badge-icon">' + X_SVG + '</span>' +
+          '<div class="vz-badge-body"><strong>Conteúdo reprovado</strong><small>' + rejectedResponses.length + (rejectedResponses.length === 1 ? " reprovação registrada" : " reprovações registradas") + '</small>' +
+            responseList(rejectedResponses) + myReview + '</div>' + links +
+        '</div>';
     } else if (personalMode === "done") {
       verdict.innerHTML = myReview + links;
     } else {
@@ -397,8 +432,8 @@
 
     if (label && !busy[id]) {
       label.dataset.state = "saved";
-      if (personalMode === "choice") label.textContent = item.status === "pending" ? "Aprove este conteúdo ou peça um ajuste." : "Você ainda pode registrar o seu próprio parecer.";
-      else if (personalMode === "edit") label.textContent = "O pedido é enviado quando você confirmar.";
+      if (personalMode === "choice") label.textContent = item.status === "pending" ? "Aprove, peça um ajuste ou reprove este conteúdo." : "Você ainda pode registrar o seu próprio parecer.";
+      else if (personalMode === "edit") label.textContent = editing[id] === "reject" ? "A reprovação é registrada quando você confirmar." : "O pedido é enviado quando você confirmar.";
       else label.textContent = own.updatedAt ? "Seu parecer foi salvo em " + formatDate(own.updatedAt) : "";
     }
   }
@@ -407,9 +442,12 @@
     var items = boxes.map(function (box) { return state[box.dataset.id] || { status: "pending" }; });
     var approved = items.filter(function (item) { return item.status === "approved"; }).length;
     var changes = items.filter(function (item) { return item.status === "changes_requested"; }).length;
-    var done = approved + changes;
+    var rejected = items.filter(function (item) { return item.status === "rejected"; }).length;
+    var done = approved + changes + rejected;
     var complete = items.length > 0 && done === items.length;
-    var overall = complete ? (changes ? "Plano com ajustes" : "Plano aprovado") : approved === 0 ? "Aguardando cliente" : "Em revisão";
+    var overall = complete
+      ? (changes ? "Plano com ajustes" : rejected ? "Plano concluído" : "Plano aprovado")
+      : (approved === 0 && rejected === 0) ? "Aguardando cliente" : "Em revisão";
     var counter = document.getElementById("appr-count");
     if (counter) counter.textContent = done + " de " + items.length + " conteúdos avaliados · " + overall;
     setReviewStatus(complete ? (changes ? "adjustments" : "approved") : "active", true);
@@ -452,10 +490,10 @@
     var lines = [document.title + " — Parecer do cliente", ""];
     boxes.forEach(function (box) {
       var item = state[box.dataset.id] || { status: "pending", comment: "", responses: [] };
-      var label = item.status === "approved" ? "APROVADO" : item.status === "changes_requested" ? "AJUSTE SOLICITADO" : "SEM AVALIAÇÃO";
+      var label = item.status === "approved" ? "APROVADO" : item.status === "changes_requested" ? "AJUSTE SOLICITADO" : item.status === "rejected" ? "REPROVADO" : "SEM AVALIAÇÃO";
       lines.push((box.dataset.title || box.dataset.id) + ": " + label);
       (item.responses || []).filter(function (response) { return response.status !== "pending"; }).forEach(function (response) {
-        lines.push((response.approverName || "Cliente") + ": " + (response.status === "approved" ? "APROVOU" : "PEDIU AJUSTE"));
+        lines.push((response.approverName || "Cliente") + ": " + (response.status === "approved" ? "APROVOU" : response.status === "rejected" ? "REPROVOU" : "PEDIU AJUSTE"));
         if (response.comment) lines.push('Comentário: "' + response.comment + '"');
       });
       lines.push("");
@@ -551,7 +589,7 @@
       return;
     }
 
-    var button = target.closest(".vz-approve, .vz-request, .vz-send, .vz-cancel, .vz-undo, .vz-edit-request");
+    var button = target.closest(".vz-approve, .vz-request, .vz-reject, .vz-send, .vz-cancel, .vz-undo, .vz-edit-request");
     if (!button) return;
     var box = button.closest(".approval[data-id]");
     if (!box) return;
@@ -565,8 +603,12 @@
       save(box, "approved", "");
       return;
     }
-    if (button.classList.contains("vz-request") || button.classList.contains("vz-edit-request")) {
-      editing[id] = true;
+    if (button.classList.contains("vz-request") || button.classList.contains("vz-reject") || button.classList.contains("vz-edit-request")) {
+      // "Editar meu pedido/motivo" mantém o modo do parecer já registrado;
+      // caso contrário, o botão define se é ajuste ou reprovação.
+      editing[id] = button.classList.contains("vz-edit-request")
+        ? (own.status === "rejected" ? "reject" : "adjust")
+        : button.classList.contains("vz-reject") ? "reject" : "adjust";
       dirty[id] = false;
       renderBox(box, false);
       var textarea = box.querySelector(".vz-edit textarea");
@@ -588,11 +630,11 @@
       var input = box.querySelector(".vz-edit textarea");
       var comment = input ? input.value.trim() : "";
       if (!comment) return;
-      save(box, "changes_requested", comment);
+      save(box, editing[id] === "reject" ? "rejected" : "changes_requested", comment);
       return;
     }
     if (button.classList.contains("vz-undo")) {
-      save(box, "pending", own.status === "changes_requested" ? own.comment || "" : "");
+      save(box, "pending", (own.status === "changes_requested" || own.status === "rejected") ? own.comment || "" : "");
       return;
     }
   }

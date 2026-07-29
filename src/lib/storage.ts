@@ -149,8 +149,18 @@ function aggregateApprovalItem(item: ApprovalItem, responses: ApprovalResponse[]
   const active = responses.filter((response) => response.status !== "pending");
   const approved = active.filter((response) => response.status === "approved");
   const adjustments = active.filter((response) => response.status === "changes_requested");
-  const status: ApprovalStatus = approved.length ? "approved" : adjustments.length ? "changes_requested" : "pending";
-  const representative = [...(status === "approved" ? approved : status === "changes_requested" ? adjustments : responses)]
+  const rejections = active.filter((response) => response.status === "rejected");
+  // Precedência: um "ok" ou um pedido de ajuste (que reabre) têm prioridade sobre a
+  // reprovação num cenário de múltiplos avaliadores. No caso comum (um avaliador) o
+  // status é simplesmente o parecer da pessoa.
+  const status: ApprovalStatus = approved.length
+    ? "approved"
+    : adjustments.length
+      ? "changes_requested"
+      : rejections.length
+        ? "rejected"
+        : "pending";
+  const representative = [...(status === "approved" ? approved : status === "changes_requested" ? adjustments : status === "rejected" ? rejections : responses)]
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
   const updatedAt = [...responses].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0]?.updatedAt || item.updatedAt;
 
@@ -321,23 +331,26 @@ async function getVercelApprovalSnapshot(slug: string): Promise<ApprovalSnapshot
 
 export function summarizeApprovals(approvals: PlanApprovals): ApprovalSummary {
   const total = approvals.items.length;
-  const approved = approvals.autoApproved ? total : approvals.items.filter((item) => item.status === "approved").length;
-  const changesRequested = approvals.autoApproved ? 0 : approvals.items.filter((item) => item.status === "changes_requested").length;
-  const pending = total - approved - changesRequested;
+  const approved = approvals.items.filter((item) => item.status === "approved").length;
+  const changesRequested = approvals.items.filter((item) => item.status === "changes_requested").length;
+  const rejected = approvals.items.filter((item) => item.status === "rejected").length;
+  const pending = total - approved - changesRequested - rejected;
   const roundComplete = total > 0 && pending === 0;
   let status: ApprovalSummary["status"] = "not_started";
 
-  if (approvals.autoApproved) status = "approved";
   if (total > 0) status = "pending";
-  if (approved > 0) status = "in_review";
+  if (approved > 0 || rejected > 0) status = "in_review";
   if (changesRequested > 0) status = "changes_requested";
-  if (total > 0 && approved === total) status = "approved";
+  // Rodada encerrada sem pedidos de ajuste em aberto: plano resolvido (aprovados +
+  // eventuais reprovados que foram descartados).
+  if (roundComplete && changesRequested === 0) status = "approved";
 
   if (approvals.autoApproved) status = "approved";
   return {
     total,
     approved,
     changesRequested,
+    rejected,
     pending,
     status,
     updatedAt: approvals.updatedAt,
@@ -359,7 +372,11 @@ export function applyPlanDeadline(plan: Plan, approvals: PlanApprovals, now = ne
   }
   return {
     ...approvals,
-    items: approvals.items.map((item) => ({ ...item, status: "approved" as ApprovalStatus })),
+    // Aprovação automática só alcança o que ficou sem resposta ou com ajuste pendente.
+    // Conteúdos já reprovados pelo cliente continuam reprovados.
+    items: approvals.items.map((item) => (
+      item.status === "rejected" ? item : { ...item, status: "approved" as ApprovalStatus }
+    )),
     autoApproved: true,
     deadlineAt: plan.approvalDeadline,
     reviewVersion,
@@ -559,7 +576,9 @@ export async function recordApproval(input: {
         ? "approved"
         : input.status === "changes_requested"
           ? "changes_requested"
-          : "reopened"
+          : input.status === "rejected"
+            ? "rejected"
+            : "reopened"
       : "commented";
 
     const event: ApprovalEvent = {

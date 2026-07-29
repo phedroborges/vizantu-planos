@@ -20,6 +20,7 @@ function formatDate(value?: string) {
 function actionLabel(event: ApprovalEvent) {
   if (event.action === "approved") return "Aprovou";
   if (event.action === "changes_requested") return "Solicitou ajuste";
+  if (event.action === "rejected") return "Reprovou";
   if (event.action === "commented") return "Atualizou o comentário";
   return "Reabriu a avaliação";
 }
