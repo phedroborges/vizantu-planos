@@ -1,7 +1,9 @@
 "use client";
 
-import { Check, Copy, ExternalLink, MessageSquareText, RefreshCw } from "lucide-react";
+import { Check, Copy, ExternalLink, Layers, MessageSquareText, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { VersionTimeline } from "@/components/version-timeline";
+import { buildVersionTimeline } from "@/lib/version-timeline";
 import type { ApprovalStatus, Plan, PlanApprovals } from "@/lib/types";
 
 function formatDate(value?: string) {
@@ -63,6 +65,7 @@ export function ReviewDashboard({ plan, initialApprovals }: { plan: Plan; initia
   const overall = useMemo(() => planStatus(approvals), [approvals]);
   const pending = approvals.items.length - overall.approved - overall.changes;
   const currentVersion = approvals.reviewVersion || plan.reviewVersion || 1;
+  const versionTimeline = useMemo(() => buildVersionTimeline(approvals, currentVersion), [approvals, currentVersion]);
 
   const refresh = useCallback(async (silent = false) => {
     if (!silent) setIsRefreshing(true);
@@ -153,6 +156,18 @@ export function ReviewDashboard({ plan, initialApprovals }: { plan: Plan; initia
           <strong>Prazo de aprovação</strong>
           <span>O cliente pode responder até {formatDate(plan.approvalDeadline)}. Depois desse horário, o plano será aprovado automaticamente.</span>
         </div>
+      ) : null}
+
+      {approvals.items.length > 0 ? (
+        <section className="review-section review-versions-section" aria-label="Linha do tempo das versões">
+          <div className="section-title">
+            <div><span className="eyebrow">Como evoluiu</span><h2><Layers size={17} /> Linha do tempo das versões</h2></div>
+            <span>{versionTimeline.length} {versionTimeline.length === 1 ? "versão" : "versões"}</span>
+          </div>
+          <div className="review-versions-body">
+            <VersionTimeline breakdowns={versionTimeline} variant="full" />
+          </div>
+        </section>
       ) : null}
 
       <div className="review-columns">

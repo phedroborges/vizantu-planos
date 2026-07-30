@@ -1,7 +1,9 @@
 "use client";
 
-import { Check, ChevronRight, History, MessageSquareText, RefreshCw } from "lucide-react";
+import { Check, ChevronRight, History, Layers, MessageSquareText, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { VersionTimeline } from "@/components/version-timeline";
+import { buildVersionTimeline } from "@/lib/version-timeline";
 import type { ApprovalEvent, ApprovalItem, PlanApprovals } from "@/lib/types";
 
 function formatDate(value?: string) {
@@ -40,6 +42,11 @@ export function EditorReviewSidebar({
       .filter((response) => response.status === "changes_requested")
       .map((response) => ({ item, response }))),
     [approvals],
+  );
+  const currentVersion = approvals.reviewVersion || 1;
+  const versionTimeline = useMemo(
+    () => buildVersionTimeline(approvals, currentVersion),
+    [approvals, currentVersion],
   );
 
   const refresh = useCallback(async (silent = false) => {
@@ -84,6 +91,16 @@ export function EditorReviewSidebar({
           <RefreshCw size={15} className={isRefreshing ? "spin" : ""} />
         </button>
       </div>
+
+      <section className="editor-review-section" aria-labelledby="editor-versions-title">
+        <div className="editor-review-section-title">
+          <h3 id="editor-versions-title"><Layers size={14} /> Linha do tempo das versões</h3>
+          <span>V{currentVersion}</span>
+        </div>
+        <div className="editor-versions-wrap">
+          <VersionTimeline breakdowns={versionTimeline} onSelectItem={onSelectItem} variant="compact" />
+        </div>
+      </section>
 
       <div className={`editor-review-summary ${adjustments.length ? "has-adjustments" : "clear"}`}>
         <span className="editor-review-summary-icon">{adjustments.length ? <MessageSquareText size={17} /> : <Check size={17} />}</span>
