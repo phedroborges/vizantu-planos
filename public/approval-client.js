@@ -194,6 +194,17 @@
       ".vz-response strong{display:inline!important;font-size:11px!important}",
       ".vz-response p{margin:5px 0 0;white-space:pre-wrap}",
       ".vz-my-review{margin-top:10px;padding:10px 12px;border:1px solid #d8dcd7;border-radius:5px;background:#f7f8f6;font:600 11px/1.45 Arial,sans-serif;color:#4c554d}",
+      /* calendario refletindo o parecer do cliente */
+      ".cal-chip.vz-cal-marked{position:relative;overflow:visible}",
+      ".cal-chip.vz-cal-approved{background:#eff8dd}",
+      ".cal-chip.vz-cal-changes{background:#fff3ed}",
+      ".cal-chip.vz-cal-rejected{background:#fdeceb;text-decoration:line-through;text-decoration-color:rgba(160,42,36,.5)}",
+      ".cal-chip.vz-cal-rejected b{color:#a02a24}",
+      ".vz-cal-badge{position:absolute;top:-6px;right:-6px;width:16px;height:16px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);z-index:3;pointer-events:none}",
+      ".vz-cal-badge svg{width:10px;height:10px}",
+      ".vz-cal-approved .vz-cal-badge{background:#2f5f3c}",
+      ".vz-cal-changes .vz-cal-badge{background:#d65d32}",
+      ".vz-cal-rejected .vz-cal-badge{background:#bc342c}",
       "@media(max-width:640px){.vz-generated-approval{padding:16px}.vz-generated-head{display:block}.vz-generated-head strong{display:block;margin-top:6px;text-align:left}.vz-choice{display:grid;grid-template-columns:1fr 1fr}.vz-choice .vz-approve{grid-column:1/-1}.vz-badge{flex-wrap:wrap}.vz-badge-links{flex-direction:row;width:100%;justify-content:flex-end}.vz-gate-card{padding:24px 20px}.vz-identity{right:10px;bottom:10px}}"
     ].join("");
     document.head.appendChild(style);
@@ -515,6 +526,56 @@
     }
   }
 
+  // ── Integração com o calendário do HTML ──────────────────────────────
+  // Cada dia do calendário é um <a class="cal-chip" href="#roteiro-1"> que
+  // aponta para o conteúdo <article id="roteiro-1">. Refletimos aqui o parecer
+  // do cliente (aprovado/ajuste/reprovado) direto no chip, ao vivo.
+  var calendarMap = null;
+
+  function buildCalendarMap() {
+    var map = {};
+    boxes.forEach(function (box) {
+      var host = box.closest ? box.closest("article[id], section[id]") : null;
+      if (host && host.id) map[host.id] = box.dataset.id;
+    });
+    return map;
+  }
+
+  function setChipStatus(chip, status) {
+    var supported = { approved: 1, changes_requested: 1, rejected: 1 };
+    chip.classList.remove("vz-cal-approved", "vz-cal-changes", "vz-cal-rejected");
+    var badge = chip.querySelector(".vz-cal-badge");
+    if (!supported[status]) {
+      chip.classList.remove("vz-cal-marked");
+      if (badge) badge.parentNode.removeChild(badge);
+      return;
+    }
+    chip.classList.add("vz-cal-marked");
+    chip.classList.add(status === "approved" ? "vz-cal-approved" : status === "rejected" ? "vz-cal-rejected" : "vz-cal-changes");
+    if (!badge) {
+      badge = document.createElement("span");
+      badge.className = "vz-cal-badge";
+      chip.appendChild(badge);
+    }
+    badge.innerHTML = status === "approved" ? CHECK_SVG : status === "rejected" ? X_SVG : PENCIL_SVG;
+  }
+
+  function updateCalendar() {
+    var chips = document.querySelectorAll(".cal-chip[href^='#'], .cal-day a[href^='#']");
+    if (!chips.length) return;
+    if (!calendarMap) calendarMap = buildCalendarMap();
+    Array.prototype.forEach.call(chips, function (chip) {
+      var href = chip.getAttribute("href") || "";
+      if (href.charAt(0) !== "#") return;
+      var domId = "";
+      try { domId = decodeURIComponent(href.slice(1)); } catch { domId = href.slice(1); }
+      if (!domId) return;
+      var approvalId = calendarMap[domId] || ("conteudo-" + domId);
+      var item = state[approvalId];
+      setChipStatus(chip, item ? item.status : "pending");
+    });
+  }
+
   function applyApprovals(approvals, animatedBox) {
     var updatedAt = Date.parse(approvals.updatedAt || "") || 0;
     if (updatedAt && updatedAt < lastUpdatedAt) return false;
@@ -523,6 +584,7 @@
     (approvals.items || []).forEach(function (item) { state[item.id] = item; });
     boxes.forEach(function (box) { renderBox(box, box === animatedBox); });
     renderSummary();
+    updateCalendar();
     return true;
   }
 
