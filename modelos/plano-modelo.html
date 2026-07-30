@@ -1,0 +1,199 @@
+<!doctype html>
+<!--
+  ┌───────────────────────────────────────────────────────────────────────┐
+  │  MODELO DE PLANO · Vizantu Planos                                       │
+  │                                                                         │
+  │  Estrutura enxuta pensada para o app:                                   │
+  │   1. Capa                                                               │
+  │   2. UMA página de contexto (o que é / como aprovar)                    │
+  │   3. Os conteúdos, um por bloco <article class="script" id="cN">        │
+  │                                                                         │
+  │  NÃO coloque botões de aprovação aqui. O Vizantu Planos injeta          │
+  │  automaticamente "Aprovar · Pedir ajuste · Reprovar" no fim de cada     │
+  │  <article class="script" id="…">. Cada id precisa ser único.            │
+  │                                                                         │
+  │  Troque tudo que está entre [colchetes]. Duplique um <article> para     │
+  │  cada novo conteúdo (c1, c2, c3, …).                                    │
+  └───────────────────────────────────────────────────────────────────────┘
+-->
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Plano de Conteúdo · [CLIENTE]</title>
+  <style>
+    :root{
+      --roxo:#6435e7; --roxo-claro:#9147ff; --tinta:#151715; --grafite:#101010;
+      --papel:#f4f5f2; --branco:#ffffff; --linha:#e2e4df; --suave:#6b7169; --verde:#6aa329;
+      --sans:"Helvetica Neue",Arial,sans-serif;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--papel);color:var(--tinta);font-family:var(--sans);line-height:1.6;-webkit-font-smoothing:antialiased}
+    .eyebrow{display:block;font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--roxo)}
+    h1,h2,h3,h4{margin:0;line-height:1.15;font-weight:800;letter-spacing:-.01em}
+
+    /* 1 · CAPA */
+    .capa{background:var(--grafite);color:#fff;padding:88px 44px 72px;position:relative;overflow:hidden}
+    .capa::after{content:"";position:absolute;right:-140px;top:-140px;width:420px;height:420px;border-radius:50%;
+      background:radial-gradient(circle,rgba(145,71,255,.35),transparent 68%)}
+    .capa-logo{width:190px;height:auto;display:block;margin-bottom:56px;position:relative;z-index:1}
+    .capa .eyebrow{color:var(--roxo-claro);margin-bottom:18px}
+    .capa h1{font-size:clamp(40px,7vw,72px);position:relative;z-index:1}
+    .capa-sub{margin:16px 0 0;font-size:18px;color:#cfc9d7;max-width:560px;position:relative;z-index:1}
+    .capa-meta{margin-top:44px;display:flex;flex-wrap:wrap;gap:14px;position:relative;z-index:1}
+    .capa-meta div{padding:12px 18px;border:1px solid rgba(255,255,255,.16);border-radius:12px;background:rgba(255,255,255,.04)}
+    .capa-meta strong{display:block;font-size:16px}
+    .capa-meta span{font-size:11px;color:#a49db4;text-transform:uppercase;letter-spacing:.08em}
+
+    /* 2 · CONTEXTO */
+    .contexto{max-width:840px;margin:0 auto;padding:64px 44px 8px}
+    .contexto h2{font-size:clamp(28px,4vw,40px);margin:10px 0 18px}
+    .contexto p{font-size:16px;color:#3c413a;max-width:680px}
+    .passos{list-style:none;margin:32px 0 0;padding:0;display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+    .passos li{background:var(--branco);border:1px solid var(--linha);border-radius:14px;padding:20px}
+    .passos b{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;
+      background:var(--roxo);color:#fff;font-size:13px;margin-bottom:10px}
+    .passos h4{font-size:14px;margin-bottom:4px}
+    .passos p{font-size:13px;color:var(--suave);margin:0}
+    .foco{margin:28px 0 0;padding:20px 22px;border-left:4px solid var(--roxo);background:#efeafd;border-radius:0 12px 12px 0}
+    .foco strong{color:#3a2470}
+
+    /* 3 · CONTEÚDOS */
+    main{max-width:840px;margin:0 auto;padding:40px 44px 80px}
+    .secao-titulo{display:flex;align-items:baseline;justify-content:space-between;gap:16px;margin:20px 0 6px}
+    .secao-titulo h2{font-size:22px}
+    .secao-titulo span{font-size:12px;color:var(--suave)}
+    article.script{background:var(--branco);border:1px solid var(--linha);border-radius:18px;padding:28px;margin:22px 0;
+      box-shadow:0 10px 30px rgba(25,20,36,.05)}
+    .script-header .eyebrow{color:var(--verde)}
+    .script-header h3{font-size:24px;margin:8px 0 20px}
+    .script-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:22px}
+    .script-grid > div{background:var(--papel);border-radius:12px;padding:13px 15px}
+    .script-grid h4{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--suave);margin-bottom:5px}
+    .script-grid p{margin:0;font-size:14px;font-weight:600}
+    .script-block{margin-top:16px}
+    .script-block h4{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--roxo);margin-bottom:6px}
+    .script-block p{margin:0;font-size:15px;color:#2d322b;white-space:pre-line}
+
+    footer{border-top:1px solid var(--linha);padding:34px 44px;text-align:center;color:var(--suave);font-size:12px}
+    footer svg{width:120px;height:auto;opacity:.9;margin-bottom:12px}
+
+    @media (max-width:640px){
+      .capa{padding:56px 24px 48px}
+      .contexto,main{padding-left:24px;padding-right:24px}
+      .passos,.script-grid{grid-template-columns:1fr}
+      article.script{padding:20px}
+    }
+    @media print{
+      body{background:#fff}
+      article.script{break-inside:avoid;box-shadow:none}
+      .capa::after{display:none}
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ══ 1 · CAPA ══ -->
+  <header class="capa">
+    <svg class="capa-logo" viewBox="0 0 1518.08 295.55" xmlns="http://www.w3.org/2000/svg" aria-label="Vizantu">
+      <defs><linearGradient id="vzg" x1="133.53" y1="147.78" x2="235.91" y2="147.78" gradientUnits="userSpaceOnUse">
+        <stop offset="0" stop-color="#6435e7"/><stop offset=".52" stop-color="#7b3ef3"/><stop offset="1" stop-color="#9147ff"/></linearGradient></defs>
+      <path fill="#6435e7" d="M357.19,67.76L221.67,0v73.89l147.78,73.89v-60.19c0-8.4-4.74-16.07-12.25-19.82Z"/>
+      <path fill="#9147ff" d="M357.19,227.79l-135.53,67.76v-73.89s147.78-73.89,147.78-73.89v60.19c0,8.4-4.74,16.07-12.25,19.82Z"/>
+      <path fill="#9147ff" d="M12.25,227.79l135.53,67.76v-73.89L0,147.78v60.19C0,216.36,4.74,224.04,12.25,227.79Z"/>
+      <path fill="#6435e7" d="M12.25,67.76L147.78,0v73.89S0,147.78,0,147.78v-60.19c0-8.4,4.74-16.07,12.25-19.82Z"/>
+      <circle fill="url(#vzg)" cx="184.72" cy="147.78" r="51.19"/>
+      <g fill="#fdfdfd"><path d="M635.77,56.52c-6.25,0-11.4-1.65-15.44-4.96-4.05-3.31-6.07-7.9-6.07-13.78s2.02-10.75,6.07-14.06c4.04-3.31,9.19-4.96,15.44-4.96s11.67,1.65,15.71,4.96c4.04,3.31,6.07,8,6.07,14.06s-2.02,10.48-6.07,13.78c-4.05,3.31-9.28,4.96-15.71,4.96ZM615.64,221.67V73.89h40.53v147.78h-40.53Z"/><path d="M681.26,221.67v-28.95l75.27-86.29h-70.86v-32.53h122.69v28.4l-75.27,86.85h78.3v32.53h-130.13Z"/><path d="M888.32,224.15c-9.01,0-17.19-1.7-24.54-5.1-7.35-3.4-13.69-8.36-19.02-14.89-5.33-6.52-9.42-14.56-12.27-24.12-2.85-9.56-4.27-20.31-4.27-32.26,0-16.17,2.52-30,7.58-41.49,5.05-11.48,12.08-20.22,21.09-26.19,9-5.97,19.48-8.96,31.43-8.96,7.53,0,14.34,1.15,20.4,3.45,6.07,2.3,11.3,5.51,15.71,9.65,4.41,4.14,7.62,8.96,9.65,14.47h2.21l1.65-24.81h38.32v147.78h-38.32l-1.65-25.09h-2.21c-2.94,8.27-8.5,14.94-16.68,19.99-8.18,5.06-17.88,7.58-29.09,7.58ZM902.93,191.34c7.35,0,13.46-1.56,18.33-4.69,4.87-3.12,8.5-7.44,10.89-12.96,2.39-5.51,3.58-11.76,3.58-18.75v-14.61c0-7.17-1.24-13.46-3.72-18.89-2.48-5.42-6.16-9.69-11.03-12.82-4.87-3.12-10.52-4.69-16.96-4.69-7.72,0-14.11,1.75-19.16,5.24-5.06,3.49-8.87,8.5-11.44,15.03-2.58,6.53-3.86,14.38-3.86,23.57s1.19,16.54,3.58,23.16c2.39,6.62,6.07,11.67,11.03,15.16,4.96,3.49,11.21,5.24,18.75,5.24Z"/><path d="M1011,221.67V73.89h38.87l1.65,26.74h1.65c4.04-9.93,10.29-17.32,18.75-22.19,8.45-4.87,17.92-7.31,28.4-7.31,7.35,0,14.2,1.15,20.54,3.45,6.34,2.3,11.85,5.84,16.54,10.61,4.69,4.78,8.36,11.08,11.03,18.89,2.66,7.81,4,17.23,4,28.26v89.33h-40.53v-80.51c0-8.27-.97-15.16-2.9-20.68-1.93-5.51-4.92-9.6-8.96-12.27-4.04-2.66-9.37-4-15.99-4-6.99,0-12.87,1.65-17.64,4.96-4.78,3.31-8.46,7.63-11.03,12.96-2.58,5.33-3.86,11.12-3.86,17.37v82.16h-40.53Z"/><path d="M1234.87,221.67c-12.68,0-22.06-2.99-28.12-8.96-6.07-5.97-9.1-15.48-9.1-28.54v-77.75h-26.47v-32.53h26.47v-40.25l40.53-3.86v44.11h29.78v32.53h-29.78v70.3c0,4.6,1.1,7.72,3.31,9.37s5.33,2.48,9.37,2.48h17.09v33.08h-33.08Z"/><path d="M1345.15,224.15c-11.21,0-20.77-2.21-28.67-6.62-7.9-4.41-13.88-10.98-17.92-19.71-4.04-8.73-6.07-19.34-6.07-31.84v-92.08h40.53v81.33c0,7.72.97,14.25,2.9,19.57,1.93,5.33,4.96,9.42,9.1,12.27,4.14,2.85,9.51,4.27,16.13,4.27s12.59-1.65,17.37-4.96c4.78-3.31,8.45-7.67,11.03-13.1,2.57-5.42,3.86-11.35,3.86-17.78v-81.61h40.53v147.78h-38.87l-1.65-27.02h-1.65c-3.68,9.56-9.7,16.87-18.06,21.92-8.37,5.06-17.88,7.58-28.53,7.58Z"/><path d="M493.78,221.67l-50.45-147.78h43.56l22.88,84.64,8.27,32.26h1.65l8.27-32.26,22.88-84.64h43.84l-50.45,147.78h-50.45Z"/></g>
+    </svg>
+    <span class="eyebrow">Planejamento de conteúdo</span>
+    <h1>[Mês/2026] · [Cliente]</h1>
+    <p class="capa-sub">Proposta de conteúdos do mês para a sua aprovação.</p>
+    <div class="capa-meta">
+      <div><span>Período</span><strong>[01–31 de mês]</strong></div>
+      <div><span>Conteúdos</span><strong>[6] peças</strong></div>
+      <div><span>Responsável</span><strong>[Seu nome]</strong></div>
+    </div>
+  </header>
+
+  <!-- ══ 2 · CONTEXTO (uma página só) ══ -->
+  <section class="contexto">
+    <span class="eyebrow">Como aprovar</span>
+    <h2>O que você vai fazer nesta página</h2>
+    <p>
+      Abaixo estão os conteúdos que preparamos para <strong>[o mês]</strong>. Cada um traz o formato,
+      a ideia e a legenda. Ao lado de cada conteúdo você decide o que fazer — não precisa responder tudo de uma vez,
+      e o que você não decidir hoje continua salvo.
+    </p>
+    <ul class="passos">
+      <li><b>1</b><h4>Aprovar</h4><p>Está bom como está? Aprove e ele segue para produção.</p></li>
+      <li><b>2</b><h4>Pedir ajuste</h4><p>Gostou da ideia mas quer mudar algo? Descreva o ajuste.</p></li>
+      <li><b>3</b><h4>Reprovar</h4><p>Não quer esse conteúdo? Reprove e diga o porquê.</p></li>
+    </ul>
+    <div class="foco">
+      <strong>Foco do mês:</strong> [em 1 frase, o objetivo do planejamento — ex.: gerar autoridade e aquecer para o lançamento de agosto].
+    </div>
+  </section>
+
+  <!-- ══ 3 · CONTEÚDOS ══ -->
+  <main>
+    <div class="secao-titulo">
+      <h2>Conteúdos</h2>
+      <span>[6] peças para aprovação</span>
+    </div>
+
+    <!-- ▼ COPIE ESTE BLOCO PARA CADA CONTEÚDO. Troque o id (c1, c2, c3…) -->
+    <article class="script" id="c1">
+      <div class="script-header">
+        <span class="eyebrow">Conteúdo 01 · [Reels]</span>
+        <h3>[Título do conteúdo]</h3>
+      </div>
+      <div class="script-grid">
+        <div><h4>Formato</h4><p>[Reels · 30s]</p></div>
+        <div><h4>Data sugerida</h4><p>[Ter · 05/mês]</p></div>
+        <div><h4>Objetivo</h4><p>[Alcance]</p></div>
+      </div>
+      <div class="script-block"><h4>Ideia / Roteiro</h4><p>[Descreva a ideia, o gancho e a sequência de cenas.]</p></div>
+      <div class="script-block"><h4>Legenda</h4><p>[Rascunho da legenda com o CTA.]</p></div>
+      <div class="script-block"><h4>Referência</h4><p>[Link ou descrição da referência visual.]</p></div>
+      <!-- ⚠ Não coloque botões aqui: o app injeta Aprovar / Pedir ajuste / Reprovar automaticamente. -->
+    </article>
+
+    <article class="script" id="c2">
+      <div class="script-header">
+        <span class="eyebrow">Conteúdo 02 · [Carrossel]</span>
+        <h3>[Título do conteúdo]</h3>
+      </div>
+      <div class="script-grid">
+        <div><h4>Formato</h4><p>[Carrossel · 6 cards]</p></div>
+        <div><h4>Data sugerida</h4><p>[Qui · 07/mês]</p></div>
+        <div><h4>Objetivo</h4><p>[Salvamentos]</p></div>
+      </div>
+      <div class="script-block"><h4>Ideia / Roteiro</h4><p>[Card a card: o que aparece em cada um.]</p></div>
+      <div class="script-block"><h4>Legenda</h4><p>[Rascunho da legenda com o CTA.]</p></div>
+      <div class="script-block"><h4>Referência</h4><p>[Link ou descrição da referência visual.]</p></div>
+    </article>
+
+    <article class="script" id="c3">
+      <div class="script-header">
+        <span class="eyebrow">Conteúdo 03 · [Estático]</span>
+        <h3>[Título do conteúdo]</h3>
+      </div>
+      <div class="script-grid">
+        <div><h4>Formato</h4><p>[Card único]</p></div>
+        <div><h4>Data sugerida</h4><p>[Sáb · 09/mês]</p></div>
+        <div><h4>Objetivo</h4><p>[Autoridade]</p></div>
+      </div>
+      <div class="script-block"><h4>Ideia / Roteiro</h4><p>[Descreva a arte e a mensagem principal.]</p></div>
+      <div class="script-block"><h4>Legenda</h4><p>[Rascunho da legenda com o CTA.]</p></div>
+      <div class="script-block"><h4>Referência</h4><p>[Link ou descrição da referência visual.]</p></div>
+    </article>
+    <!-- ▲ FIM DO BLOCO DE CONTEÚDO -->
+
+  </main>
+
+  <footer>
+    <div>Plano criado por Vizantu · vizantu.com.br</div>
+  </footer>
+
+</body>
+</html>

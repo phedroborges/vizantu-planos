@@ -21,12 +21,14 @@ function formatDate(value?: string) {
 function statusLabel(status: ApprovalStatus) {
   if (status === "approved") return "Aprovado";
   if (status === "changes_requested") return "Ajuste solicitado";
+  if (status === "rejected") return "Reprovado";
   return "Aguardando";
 }
 
 function actionLabel(action: PlanApprovals["history"][number]["action"]) {
   if (action === "approved") return "Aprovou o conteúdo";
   if (action === "changes_requested") return "Solicitou ajuste";
+  if (action === "rejected") return "Reprovou o conteúdo";
   if (action === "commented") return "Atualizou o comentário";
   return "Reabriu a avaliação";
 }
@@ -35,14 +37,15 @@ function planStatus(approvals: PlanApprovals) {
   const items = approvals.items;
   const approved = items.filter((item) => item.status === "approved").length;
   const changes = items.filter((item) => item.status === "changes_requested").length;
-  const pending = items.length - approved - changes;
-  if (approvals.autoApproved) return { label: "Plano aprovado automaticamente", tone: "approved", approved: items.length, changes: 0 };
-  if (!items.length) return { label: "Aguardando acesso", tone: "pending", approved, changes };
-  if (changes && pending === 0) return { label: "Plano com ajustes", tone: "adjustments", approved, changes };
-  if (changes) return { label: "Plano em revisão", tone: "review", approved, changes };
-  if (approved === items.length) return { label: "Plano aprovado", tone: "approved", approved, changes };
-  if (approved === 0) return { label: "Aguardando cliente", tone: "pending", approved, changes };
-  return { label: "Plano em revisão", tone: "review", approved, changes };
+  const rejected = items.filter((item) => item.status === "rejected").length;
+  const pending = items.length - approved - changes - rejected;
+  if (approvals.autoApproved) return { label: "Plano aprovado automaticamente", tone: "approved", approved: items.length - rejected, changes: 0, rejected, pending: 0 };
+  if (!items.length) return { label: "Aguardando acesso", tone: "pending", approved, changes, rejected, pending };
+  if (changes && pending === 0) return { label: "Plano com ajustes", tone: "adjustments", approved, changes, rejected, pending };
+  if (changes) return { label: "Plano em revisão", tone: "review", approved, changes, rejected, pending };
+  if (pending === 0) return { label: rejected ? "Plano concluído" : "Plano aprovado", tone: "approved", approved, changes, rejected, pending };
+  if (approved === 0 && rejected === 0) return { label: "Aguardando cliente", tone: "pending", approved, changes, rejected, pending };
+  return { label: "Plano em revisão", tone: "review", approved, changes, rejected, pending };
 }
 
 function buildReport(plan: Plan, approvals: PlanApprovals) {
@@ -63,7 +66,7 @@ export function ReviewDashboard({ plan, initialApprovals }: { plan: Plan; initia
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [copied, setCopied] = useState(false);
   const overall = useMemo(() => planStatus(approvals), [approvals]);
-  const pending = approvals.items.length - overall.approved - overall.changes;
+  const pending = overall.pending;
   const currentVersion = approvals.reviewVersion || plan.reviewVersion || 1;
   const versionTimeline = useMemo(() => buildVersionTimeline(approvals, currentVersion), [approvals, currentVersion]);
 
@@ -133,6 +136,7 @@ export function ReviewDashboard({ plan, initialApprovals }: { plan: Plan; initia
         <div className="review-stat"><strong>{approvals.items.length}</strong><span>conteúdos</span></div>
         <div className="review-stat approved"><strong>{overall.approved}</strong><span>aprovados</span></div>
         <div className="review-stat adjustments"><strong>{overall.changes}</strong><span>com ajustes</span></div>
+        {overall.rejected ? <div className="review-stat rejected"><strong>{overall.rejected}</strong><span>reprovados</span></div> : null}
         <div className="review-stat"><strong>{pending}</strong><span>aguardando</span></div>
       </section>
 

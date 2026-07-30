@@ -16,7 +16,7 @@ const payloadSchema = z.discriminatedUnion("action", [
     action: z.literal("record"),
     itemId,
     itemTitle,
-    status: z.enum(["pending", "approved", "changes_requested"]),
+    status: z.enum(["pending", "approved", "changes_requested", "rejected"]),
     comment: z.string().max(2000).default(""),
     approverName: z.string().trim().max(120).optional(),
     reviewerId: z.string().trim().min(1).max(120).regex(/^[a-zA-Z0-9_-]+$/).optional(),
