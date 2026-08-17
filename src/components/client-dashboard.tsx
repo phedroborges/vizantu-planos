@@ -13,10 +13,7 @@ export type DashboardItem = {
   captacaoLabel: string | null;
   formatLabel: string | null;
   categoryLabel: string | null;
-  scriptText: string | null;
-  directionText: string | null;
-  referenceText: string | null;
-  captionText: string | null;
+  description: string | null;
   approvalStatus: "pending" | "approved" | "changes_requested" | "rejected";
   reviewVersion: number;
   updatedAt: string;
@@ -47,6 +44,17 @@ function daysGrid(monthDate: Date) {
 
 function isoDate(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+// A descrição do item vem em markdown-lite do vizantu-tarefas — as seções
+// (Direcionamento, Roteiro, Referência, Legenda) são escritas como **negrito**
+// pela equipe. Renderiza só o negrito, como nós de texto (nada de HTML
+// injetado); quebras de linha ficam por conta do pre-wrap do container.
+function renderDescription(text: string) {
+  return text.split(/(\*\*[^*\n]+\*\*)/g).map((part, index) => {
+    const bold = /^\*\*([^*\n]+)\*\*$/.exec(part);
+    return bold ? <strong key={index}>{bold[1]}</strong> : <span key={index}>{part}</span>;
+  });
 }
 
 export function ClientDashboard({
@@ -282,10 +290,7 @@ function ApprovalModal({
         <h3>{item.name}</h3>
         <div className="cd-meta">{[item.formatLabel, item.captacaoLabel].filter(Boolean).join(" · ") || "Conteúdo"}</div>
 
-        {item.scriptText ? <p style={{ fontSize: 12.5, margin: "8px 0" }}><strong>Roteiro:</strong> {item.scriptText}</p> : null}
-        {item.directionText ? <p style={{ fontSize: 12.5, margin: "8px 0" }}><strong>Direcionamento:</strong> {item.directionText}</p> : null}
-        {item.referenceText ? <p style={{ fontSize: 12.5, margin: "8px 0" }}><strong>Referência:</strong> {item.referenceText}</p> : null}
-        {item.captionText ? <p style={{ fontSize: 12.5, margin: "8px 0" }}><strong>Legenda:</strong> {item.captionText}</p> : null}
+        {item.description ? <div className="cd-item-description">{renderDescription(item.description)}</div> : null}
 
         {justApproved ? (
           <p style={{ display: "flex", alignItems: "center", gap: 6, color: "#2f8f4e", fontWeight: 700, marginTop: 14 }}>

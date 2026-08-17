@@ -23,10 +23,7 @@ export type NativePlanItem = {
   captacaoLabel: string | null;
   formatLabel: string | null;
   categoryLabel: string | null;
-  scriptText: string | null;
-  directionText: string | null;
-  referenceText: string | null;
-  captionText: string | null;
+  description: string | null;
   approvalStatus: "pending" | "approved" | "changes_requested" | "rejected";
   reviewVersion: number;
   updatedAt: string;
@@ -98,7 +95,7 @@ export async function listProjectPlanItems(projectId: string): Promise<NativePla
   const tasks = unwrap(
     await db
       .from("tasks")
-      .select("id, plan_id, captacao_id, name, status, due_date, format_tag_ids, category_tag_ids, script_text, direction_text, reference_text, caption_text, updated_at")
+      .select("id, plan_id, captacao_id, name, status, due_date, format_tag_ids, category_tag_ids, description, updated_at")
       .in("plan_id", contentPlanIds),
   ) as {
     id: string;
@@ -109,10 +106,7 @@ export async function listProjectPlanItems(projectId: string): Promise<NativePla
     due_date: string | null;
     format_tag_ids: string[];
     category_tag_ids: string[];
-    script_text: string | null;
-    direction_text: string | null;
-    reference_text: string | null;
-    caption_text: string | null;
+    description: string | null;
     updated_at: string;
   }[];
   if (!tasks.length) return [];
@@ -150,10 +144,7 @@ export async function listProjectPlanItems(projectId: string): Promise<NativePla
       captacaoLabel: t.captacao_id ? captacaoById.get(t.captacao_id) || null : null,
       formatLabel: formatId ? tagById.get(formatId)?.label || null : null,
       categoryLabel: categoryId ? tagById.get(categoryId)?.label || null : null,
-      scriptText: t.script_text,
-      directionText: t.direction_text,
-      referenceText: t.reference_text,
-      captionText: t.caption_text,
+      description: t.description,
       approvalStatus: approval?.status || "pending",
       reviewVersion: approval?.review_version || 1,
       updatedAt: t.updated_at,
