@@ -6,6 +6,22 @@ Publicador de apresentações HTML. A equipe envia um arquivo, define o título 
 https://planos.vizantu.com.br/plano-julho-terranet
 ```
 
+## Pipeline nativo (dashboard do cliente) — `/c/[token]`
+
+Além do pipeline acima (HTML/ZIP em blob, sem login), o app também serve um
+**dashboard de cliente** alimentado direto pelos dados criados no
+[vizantu-tarefas](../vizantu-tarefas) (mesmo banco Supabase): planos de
+conteúdo, itens (vídeos/posts/carrosséis) com roteiro/direcionamento/
+referência/legenda, e aprovação por item — sem precisar mais gerar HTML
+externamente. Acesso por link mágico persistente (`/c/[token]`, um token por
+cliente, emitido na tela do Plano dentro do vizantu-tarefas), não pelo
+mecanismo de "digite seu nome" do pipeline de blob. Os dois pipelines
+coexistem sem se tocar: um plano `kind=presentation` (ou qualquer plano
+antigo já publicado) continua 100% neste fluxo de blob; planos de conteúdo
+novos são criados no vizantu-tarefas e aparecem automaticamente no dashboard
+nativo. Requer as variáveis `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` e
+`CLIENT_SESSION_SECRET` (ver `.env.example`).
+
 ## O que o app entrega
 
 - Acesso direto ao painel, sem login.

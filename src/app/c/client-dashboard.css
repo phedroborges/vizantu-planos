@@ -1,0 +1,369 @@
+.cd-root {
+  min-height: 100vh;
+  background: #f2f2f0;
+  color: #101010;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  padding: 28px 20px 80px;
+}
+
+.cd-shell {
+  max-width: 1080px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.cd-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.cd-header h1 {
+  font-size: 22px;
+  margin: 0 0 4px;
+}
+
+.cd-header p {
+  margin: 0;
+  font-size: 13px;
+  color: #6b6b6b;
+}
+
+.cd-header-meta {
+  font-size: 12px;
+  color: #6b6b6b;
+  text-align: right;
+}
+
+.cd-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+@media (max-width: 720px) {
+  .cd-stats { grid-template-columns: 1fr; }
+}
+
+.cd-card {
+  background: #fff;
+  border: 1px solid #e4e4e0;
+  padding: 18px 20px;
+}
+
+.cd-card h3 {
+  margin: 0 0 10px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #8a8a85;
+  font-weight: 600;
+}
+
+.cd-score {
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.cd-score-cta {
+  margin-top: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background: #101010;
+  color: #fff;
+  font-size: 11px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.cd-big-number {
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.cd-deliveries {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cd-delivery-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.cd-delivery-row span:first-child {
+  color: #101010;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cd-section-title {
+  font-size: 17px;
+  font-weight: 700;
+  margin: 0;
+}
+
+/* ---------- Calendário ---------- */
+
+.cd-calendar {
+  background: #fff;
+  border: 1px solid #e4e4e0;
+}
+
+.cd-calendar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid #e4e4e0;
+}
+
+.cd-calendar-head button {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 4px;
+  color: #6b6b6b;
+}
+
+.cd-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+}
+
+.cd-calendar-weekday {
+  padding: 8px 6px;
+  font-size: 10px;
+  text-transform: uppercase;
+  color: #9a9a95;
+  text-align: center;
+  border-bottom: 1px solid #e4e4e0;
+}
+
+.cd-calendar-cell {
+  min-height: 84px;
+  border-right: 1px solid #eee;
+  border-bottom: 1px solid #eee;
+  padding: 6px;
+  font-size: 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cd-calendar-cell.is-muted { background: #fafaf9; color: #c4c4bf; }
+
+.cd-calendar-daynum { font-size: 10px; color: #9a9a95; }
+
+.cd-cal-item {
+  border-radius: 3px;
+  padding: 2px 5px;
+  font-size: 9.5px;
+  font-weight: 600;
+  color: #fff;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cd-cal-item.status-approved { background: #2f8f4e; }
+.cd-cal-item.status-changes_requested { background: #d99a1f; }
+.cd-cal-item.status-rejected { background: #c23a2c; }
+.cd-cal-item.status-pending { background: #8a8a85; }
+.cd-cal-item.status-event { background: #6435e7; }
+
+/* ---------- Barra de aprovação ---------- */
+
+.cd-approval-bar-wrap {
+  background: #fff;
+  border: 1px solid #e4e4e0;
+  padding: 16px 20px;
+}
+
+.cd-approval-bar-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  margin-bottom: 8px;
+  color: #6b6b6b;
+}
+
+.cd-approval-bar-track {
+  height: 20px;
+  border-radius: 999px;
+  background: #eceae4;
+  overflow: hidden;
+  position: relative;
+}
+
+.cd-approval-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #3fae63, #2f8f4e);
+  transition: width 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ---------- Seções agrupadas ---------- */
+
+.cd-groups {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+@media (max-width: 720px) {
+  .cd-groups { grid-template-columns: 1fr; }
+}
+
+.cd-group {
+  background: #fff;
+  border: 1px solid #e4e4e0;
+  padding: 14px 16px;
+}
+
+.cd-group h4 {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.cd-group-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  padding: 7px 0;
+  border-top: 1px solid #f1f1ee;
+  cursor: pointer;
+}
+
+.cd-group-item:first-of-type { border-top: none; }
+
+.cd-group-item-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.cd-pill {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 999px;
+  color: #fff;
+  white-space: nowrap;
+}
+
+.cd-pill.status-approved { background: #2f8f4e; }
+.cd-pill.status-changes_requested { background: #d99a1f; }
+.cd-pill.status-rejected { background: #c23a2c; }
+.cd-pill.status-pending { background: #8a8a85; }
+
+.cd-pill.tag { background: #eceae4; color: #55554f; }
+
+/* ---------- Modal de aprovação ---------- */
+
+.cd-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(16, 16, 16, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 60;
+  padding: 20px;
+}
+
+.cd-approval-modal {
+  background: #fff;
+  max-width: 480px;
+  width: 100%;
+  padding: 24px;
+  position: relative;
+  border-radius: 6px;
+}
+
+.cd-approval-modal h3 {
+  margin: 0 0 4px;
+  font-size: 16px;
+}
+
+.cd-approval-modal .cd-meta {
+  font-size: 12px;
+  color: #6b6b6b;
+  margin-bottom: 16px;
+}
+
+.cd-approval-modal textarea {
+  width: 100%;
+  min-height: 70px;
+  border: 1px solid #ddd;
+  padding: 8px;
+  font: inherit;
+  font-size: 12.5px;
+  margin-top: 8px;
+  resize: vertical;
+}
+
+.cd-approval-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+
+.cd-btn {
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 9px 16px;
+  border-radius: 4px;
+}
+
+.cd-btn.approve { background: #2f8f4e; color: #fff; }
+.cd-btn.request { background: #d99a1f; color: #fff; }
+.cd-btn.reject { background: #c23a2c; color: #fff; }
+.cd-btn.ghost { background: #f1f1ee; color: #333; }
+
+.cd-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.cd-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: #999;
+}
+
+/* ---------- Gamificação ---------- */
+
+@keyframes cdCheckPop {
+  0% { transform: scale(0.4); opacity: 0; }
+  60% { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(1); }
+}
+
+.cd-celebrate-icon {
+  animation: cdCheckPop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.cd-confetti-canvas {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 80;
+}

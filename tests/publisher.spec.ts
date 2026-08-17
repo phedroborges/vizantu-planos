@@ -38,7 +38,7 @@ test("preserva pareceres simultâneos sem perder histórico", async ({ page }, t
 
   try {
     await page.goto(`/${slug}`);
-    await expect(planFrame(page).locator(".vz-status-line").first()).toContainText("Aprove este conteúdo");
+    await expect(planFrame(page).locator(".vz-status-line").first()).toContainText("Aprove, peça um ajuste ou reprove este conteúdo");
 
     const [first, second] = await Promise.all([
       page.request.post(`/api/plans/${slug}/approvals`, {
@@ -375,7 +375,7 @@ test("salva parecer por conteúdo e preserva o histórico", async ({ page }, tes
     const frame = planFrame(page);
     await identify(frame, "Cliente da aprovação");
     const box = frame.locator('.approval[data-id="conteudo-1"]');
-    await expect(box.locator(".vz-status-line")).toContainText("Aprove este conteúdo ou peça um ajuste.");
+    await expect(box.locator(".vz-status-line")).toContainText("Aprove, peça um ajuste ou reprove este conteúdo.");
 
     const send = box.locator(".vz-send");
     await box.locator(".vz-request").click();
