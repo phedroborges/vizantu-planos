@@ -31,10 +31,23 @@ Em **Environment**, defina:
 STORAGE_DRIVER=local
 DATA_DIR=/data
 NEXT_PUBLIC_SITE_URL=https://planos.metricz.com.br
+
+# Pipeline nativo (dashboard do cliente em /c/[token]) — mesmo Supabase do
+# vizantu-tarefas. Pegue a SERVICE ROLE KEY em Project Settings → API do
+# projeto Supabase (é a mesma que o vizantu-tarefas já usa em produção).
+SUPABASE_URL=https://sazagrbqmucgpicmfqil.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=
+# Gere um valor aleatório longo e único pra este ambiente (ex.: openssl rand
+# -hex 32) — nunca reaproveite o do ambiente local/dev.
+CLIENT_SESSION_SECRET=
 ```
 
 > Ajuste `NEXT_PUBLIC_SITE_URL` para o seu subdomínio real (com `https://`).
 > **Não** defina `BLOB_READ_WRITE_TOKEN` aqui — isso é só da Vercel.
+> `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY`/`CLIENT_SESSION_SECRET` são
+> server-only — diferente de `NEXT_PUBLIC_SITE_URL`, dá pra definir só na aba
+> Environment do EasyPanel (não precisam estar no `.env.production`
+> commitado, porque não são lidas no build, só em runtime).
 
 ### 5. Volume persistente (essencial)
 Em **Mounts** (ou **Volumes**) → **+ Volume**:
@@ -56,6 +69,7 @@ Clique em **Deploy**. A cada `git push` na branch `main`, o EasyPanel rebuilda e
 1. Acesse `https://planos.metricz.com.br` — o painel deve abrir.
 2. Publique um HTML de teste e confirme que o link `/{slug}` abre.
 3. Faça um redeploy e confirme que o plano de teste **continua lá** (prova do volume persistente).
+4. Crie um cliente e um link mágico num Plano de conteúdo no vizantu-tarefas, abra `https://planos.metricz.com.br/c/{token}` e confirme que o dashboard nativo carrega — prova que `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY`/`CLIENT_SESSION_SECRET` estão certos.
 
 ## Migração dos planos que estão na Vercel (opcional)
 Os planos atuais vivem no Vercel Blob e **não** vêm automaticamente. Duas opções:
