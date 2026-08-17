@@ -2,10 +2,17 @@ import crypto from "node:crypto";
 
 export const CLIENT_SESSION_COOKIE = "vz_client_session";
 
+// CLIENT_SESSION_SECRET é opcional: sem ela, deriva a chave de assinatura da
+// service-role key (que já é obrigatória pra ler o banco e nunca sai do
+// servidor). Assim o link do cliente funciona com UMA variável a menos pra
+// configurar, sem enfraquecer nada — continua sendo um segredo forte que só
+// o servidor conhece.
 function secret(): string {
-  const value = process.env.CLIENT_SESSION_SECRET;
-  if (!value) throw new Error("CLIENT_SESSION_SECRET ausente — necessário pra assinar a sessão do link mágico.");
-  return value;
+  const explicit = process.env.CLIENT_SESSION_SECRET;
+  if (explicit) return explicit;
+  const derived = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (derived) return `vz-client-session:${derived}`;
+  throw new Error("Nem CLIENT_SESSION_SECRET nem SUPABASE_SERVICE_ROLE_KEY estão configuradas.");
 }
 
 // Sessão própria pro link mágico do cliente — deliberadamente NÃO é o

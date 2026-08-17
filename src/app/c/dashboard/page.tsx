@@ -12,14 +12,22 @@ export default async function ClientDashboardPage() {
   const clientId = verifyClientSession(cookieStore.get(CLIENT_SESSION_COOKIE)?.value);
   if (!clientId) redirect("/c/invalido");
 
-  const client = await getClientById(clientId);
-  if (!client) redirect("/c/invalido");
-
-  const [items, events, score] = await Promise.all([
-    listProjectPlanItems(client.projectId),
-    listProjectEvents(client.projectId),
-    getSatisfactionScore(client.projectId),
-  ]);
+  let client, items, events, score;
+  try {
+    client = await getClientById(clientId);
+    if (!client) redirect("/c/invalido");
+    [items, events, score] = await Promise.all([
+      listProjectPlanItems(client.projectId),
+      listProjectEvents(client.projectId),
+      getSatisfactionScore(client.projectId),
+    ]);
+  } catch (err) {
+    // redirect() do Next sinaliza por exceção — deixa ela passar, senão o
+    // redirect vira "erro de config" por engano.
+    if (err && typeof err === "object" && "digest" in err && String(err.digest).startsWith("NEXT_REDIRECT")) throw err;
+    console.error("[/c/dashboard] falha ao carregar:", err);
+    redirect("/c/invalido?motivo=config");
+  }
 
   return (
     <ClientDashboard
